@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/acidanthera/VirtualSMC",
+  "tag": "1.3.8",
+  "files": {
+    "KeyImplementations.hpp": "4c049f09fdf493aa32b28174997e51c255d49cc65eda6910ff58b3b76dc19638",
+    "SMCProcessor.cpp": "e6757ec8cb1ecb667233de05a03c1ed3603661420380163ed2d05d7c11e5d1c5",
+    "KeyImplementations.cpp": "7271240cb7a53b2e1dab02556bb485fa6d9c396303cb99e0b4f0df11d75dada0",
+    "LICENSE.txt": "5bceff635b9952d36af4e784ee02158cdddb6001584439cbd8a3520eb46a28e8",
+    "SMCProcessor.hpp": "dff2efbdd491880661fcd9b3ddd43f65b9c4de808eb12aef5a00f0ad027c6250",
+    "Info.plist": "82291d0ecdf69d81a535dba2c352dd74c1189d01b6bb0955e924ae27e69e0136",
+    "VirtualSMCSDK/kern_smcinfo.hpp": "fae13b040ea92fccb9763e8b282fc830c2009e4e64ab107316da9e0ef2299bfb",
+    "VirtualSMCSDK/kern_vsmcapi.hpp": "84f6cf176db2820dfad9ce2c6ebe8c01ca7c6ff6beb8b378e7287170cf3d8c12",
+    "VirtualSMCSDK/AppleSmc.h": "c0493d157cdd000851a5c511327bd27e65036f0947a81c5b10e874b1901af199",
+    "VirtualSMCSDK/kern_keyvalue.hpp": "a600e29456f415b0d34de6b60a65253795ec83133107b54fe1a49631a08a0237",
+    "VirtualSMCSDK/kern_value.hpp": "5e6fc1f3daf377ca7d631a736ac17d1dd9f12a31ae09e981f2cd0b798292056a",
+    "VirtualSMCSDK/AppleSmcBridge.hpp": "f4ee65d0d8c10eba924366deec2ad35bb1902c2c75e222c6ef11b911d019574e"
+  }
+}

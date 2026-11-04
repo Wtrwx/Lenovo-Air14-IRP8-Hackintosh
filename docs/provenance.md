@@ -17,3 +17,5 @@
 ACPI 中的 PNLF 和 polling 触控板 SSDT、I2C 匹配注入器、EDID 校验工具及本仓库文档是 Air14 配套适配内容，按仓库 BSD-3-Clause 许可提供。它们不包含整机固件表或面板原始转储。
 
 当前时钟单位修正已完成 CPU 检查、构建及真实启动读回；这些检查不能替代持续稳定性验证。已知 GPU 挂起、界面卡顿与 WindowServer 内存增长保留为待解决问题。
+
+`sources/SMCProcessor` 基于 Acidanthera VirtualSMC 1.3.8 的 SMCProcessor 和公开 SDK，保留原许可、版权及上游文件校验值。新增仅针对物理 Intel family 6 model BA、同时具备核心与封装 DTS 能力的温度路径；不修改 Lilu 的共享 CPU 身份，也不构建或替换 VirtualSMC。该型号不启用未经验证的 RAPL、Voltage 或风扇接口。CPU 准入检查、Release 构建、温度负载变化和再次重启后的读数已验证；原始诊断继续保留在私人工作区。
