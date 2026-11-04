@@ -12,6 +12,7 @@ Use the latest [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphi
 
 ### Fixed
 
+- Correct Display 13 watermark bandwidth admission for uncompressed RGB scanout by converting the donor clock ABI to physical CDCLK before applying the two-pixels-per-clock requirement. Preserve timing, cursor, register-readback and live-surface checks. This does not resolve the separate intermittent GPU render hang.
 - Accept partial final pages in framebuffer aperture surfaces while validating the full mapped extent, and preserve hotplug-only interrupts during internal eDP display wake. Based on the [eDP report and fixes](https://github.com/b00t0x/WhateverXe/issues/22).
 - Fix graphics initialization and acceleration on additional supported Tiger Lake and Alder/Raptor Lake GPU variants, including single-channel configurations.
 - Fix graphics initialization on compatible Sequoia and Tahoe updates without requiring an exact OS build match.

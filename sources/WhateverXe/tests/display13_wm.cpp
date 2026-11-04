@@ -312,13 +312,30 @@ int main() {
     LatchIO invalidLive(p);invalidLive.oldSurface=true;invalidLive.regs[0x701AC]=UINT32_MAX;
     assert(latch(invalidLive,invalidLive.snapshot(p)).status==Status::Readback);
     auto clockPlan=committed.snapshot(p);
-    assert(clockFits(clockPlan,1305600000) && clockFits(clockPlan,297000000));
-    assert(!clockFits(clockPlan,296999999));
+    // Display 13 consumes two pipe/plane pixels per physical CDCLK cycle.
+    // The donor clock ABI is twice CDCLK, not CDCLK itself.
+    assert(clockFits(clockPlan,1305600000) && clockFits(clockPlan,148500000));
+    assert(!clockFits(clockPlan,148499998) && !clockFits(clockPlan,148500001));
     auto fasterCursor=cursor;fasterCursor.pixelHz=200000000;
     auto cursorClockPlan=committed.snapshot(p,&fasterCursor);
-    assert(clockFits(cursorClockPlan,400000000) && !clockFits(cursorClockPlan,399999999));
+    assert(clockFits(cursorClockPlan,200000000) && !clockFits(cursorClockPlan,199999998));
     clockPlan.pipePixelHz=200000000;clockPlan.pipeLineTime=pipeLineTime(p.htotal,clockPlan.pipePixelHz);
-    assert(!clockFits(clockPlan,384000000));
+    assert(clockFits(clockPlan,200000000) && !clockFits(clockPlan,199999998));
+    // A 695.31MHz 2880x1800 scanout fits 652.8MHz CDCLK. Preserve the
+    // primary, cursor, live timing and exact clock-unit checks independently.
+    auto highRate=p;highRate.pixelHz=695310000;highRate.htotal=3040;
+    auto highClockPlan=committed.snapshot(highRate);
+    assert(clockFits(highClockPlan,1305600000));
+    assert(!clockFits(highClockPlan,695309998) && clockFits(highClockPlan,695310000));
+    highRate.pixelHz=695310001;highClockPlan.pipePixelHz=highRate.pixelHz;
+    highClockPlan.pipeLineTime=pipeLineTime(highRate.htotal,highRate.pixelHz);
+    assert(!clockFits(highClockPlan,695310000) && clockFits(highClockPlan,695310002));
+    highClockPlan.pipeLineTime^=1;assert(!clockFits(highClockPlan,1305600000));
+    highClockPlan.pipeLineTime=pipeLineTime(highRate.htotal,highRate.pixelHz);
+    highRate.status=Status::Input;assert(!clockFits(highClockPlan,1305600000));
+    highRate.status=Status::Complete;
+    assert(!clockFits(highClockPlan,0) && !clockFits(highClockPlan,1305600001));
+    highClockPlan.cursorActive=true;assert(!clockFits(highClockPlan,1305600000));
     LatchIO afterCrawl(p);afterCrawl.clock=1305600000;
     assert(latch(afterCrawl,afterCrawl.snapshot(p)).status==Status::Complete && afterCrawl.writes.empty());
     LatchIO sameFrame(p);sameFrame.frozen=true;
