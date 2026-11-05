@@ -4,7 +4,7 @@
 
 WhateverXe is a Lilu plugin, derived from WhateverGreen, that adapts Apple graphics drivers for selected Intel Xe-LP integrated GPUs.
 
-This snapshot includes experimental Lenovo Air14 IRP8 adaptations with internal-panel Metal, brightness, HiDPI and 120Hz operation. GPU render hangs and interface stalls remain unresolved. See the [project README](../../README.md) for this board's validation scope and limitations. The broader hardware coverage below is inherited from upstream.
+This snapshot includes experimental Lenovo Air14 IRP8 adaptations with internal-panel Metal, brightness, HiDPI and 120Hz operation. GPU render hangs and interface stalls remain unresolved. External-display output on this board remains experimental and unverified. See the [project README](../../README.md) for this board's validation scope and limitations. The broader hardware coverage below is inherited from upstream.
 
 Use the latest releases of [WhateverXe](https://github.com/b00t0x/WhateverXe/releases) and [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphics/releases) together. See [CHANGELOG](CHANGELOG.md) for release notes.
 

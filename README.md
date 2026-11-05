@@ -2,7 +2,7 @@
 
 联想小新 Air14 IRP8 的 macOS 适配源码与配置片段，基于 [WhateverXe](https://github.com/b00t0x/WhateverXe) 0.7.0。
 
-**当前为实验性适配。内屏 Metal、背光、HiDPI 和 120Hz 已实际工作，但仍发生过 GPU 渲染队列挂起及整机界面无响应，稳定性问题尚未解决。** 本仓库不提供可直接替换使用的完整 EFI。
+**当前为实验性适配。内屏 Metal、背光、HiDPI 和 120Hz 已实际工作，但仍发生过 GPU 渲染、视频编码队列挂起及整机界面无响应，稳定性问题尚未解决。** 本仓库不提供可直接替换使用的完整 EFI。
 
 ## 硬件与验证范围
 
@@ -32,7 +32,8 @@
 | 摄像头 | 原生 UVC 实际预览、应用访问和 90 秒持续采集已验证；视频通话和编码未验证 |
 | 机身 HDMI 输出 | 未解决；当前策略禁用外部显示输出 |
 | USB-C DP Alt Mode 视频输出 | 未解决；与普通 USB、Thunderbolt 分别验证 |
-| 声卡 / 麦克风 | 未解决；内置 SST 数字麦克风需要单独适配 |
+| 内置扬声器 | AppleALC / SimpleHDA、layout 101 已部署，实际出声已确认；音量和静音待单独验收 |
+| 耳机 / 麦克风 | 耳机输出、耳麦输入待验证；内置 SST 数字麦克风需要单独适配 |
 | 蓝牙 | 当前停用，待单项验证 |
 | 电源键 / Fn | 电源键响应待修复，Fn 暂缓 |
 | CPU 温度 | Raptor Lake-P DTS 插件已验证有效读数、负载变化及再次重启后的读取；P/E 核逐核覆盖未完整验证 |
@@ -46,6 +47,7 @@
 
 - [sources/WhateverXe](sources/WhateverXe)：包含本机适配修改的显卡插件、Compat 源码及原有 CPU 测试。
 - [sources/SMCProcessor](sources/SMCProcessor)：保留 VirtualSMC 的 Raptor Lake-P 温度插件源码、构建方式和能力边界。
+- [sources/NativeAvcCompat](sources/NativeAvcCompat)：原生 H.264 VDEnc 路径的实验性 SPS 兼容源码与 CPU 回放测试；尚未通过硬件编码验收。
 - [ACPI](ACPI)：背光及触控板的自定义 SSDT 源码。
 - [config](config)：OpenCore 配置片段与 I2C 匹配注入器的 Info.plist。
 - [tools/fix_panel_edid.py](tools/fix_panel_edid.py)：为已核对的同型号面板修正 DisplayID 校验，生成本地显示覆盖候选文件。

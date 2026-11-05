@@ -4,7 +4,7 @@
 
 WhateverXeは、WhateverGreenを基に開発した、一部のIntel Xe-LP内蔵GPU向けにAppleのグラフィックスドライバーを適応させるLiluプラグインです。
 
-このスナップショットには、内蔵パネルのMetal、輝度調整、HiDPI、120Hz動作に対応するLenovo Air14 IRP8向けの実験的な変更が含まれています。GPU描画のハングと画面操作の停止は未解決です。この機種で確認した範囲と制限は[プロジェクトのREADME](../../README.md)を参照してください。以下の広範なハードウェア対応状況は上流プロジェクトから引き継いだものです。
+このスナップショットには、内蔵パネルのMetal、輝度調整、HiDPI、120Hz動作に対応するLenovo Air14 IRP8向けの実験的な変更が含まれています。GPU描画のハングと画面操作の停止は未解決です。この機種の外部ディスプレイ出力は実験段階で、実機検証は未完了です。この機種で確認した範囲と制限は[プロジェクトのREADME](../../README.md)を参照してください。以下の広範なハードウェア対応状況は上流プロジェクトから引き継いだものです。
 
 [WhateverXe](https://github.com/b00t0x/WhateverXe/releases)と[WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphics/releases)は両方とも最新版を使用してください。変更点は[CHANGELOG](CHANGELOG.md)を参照してください。
 

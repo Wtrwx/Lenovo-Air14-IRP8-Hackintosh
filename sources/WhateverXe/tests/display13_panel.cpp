@@ -33,6 +33,23 @@ int main() {
   }
   auto hdmi=w;hdmi.hdmi=1U<<(1-ddi);hdmi.ddc[1-ddi]=2;
   assert(hdmi.described() && hdmi.panelOnly().selected()==w.panel);
+  for(unsigned external=0;external<16;++external) {
+   auto mixed=hdmi;mixed.dp=external<<3;mixed.typeC=mixed.dp;
+   auto candidate=mixed.panelAndComboHDMI();
+   assert(candidate.described() && candidate.panel==w.panel && candidate.hdmi==hdmi.hdmi);
+   assert(candidate.ddc[1-ddi]==2 && !candidate.dp && !candidate.typeC && !candidate.dsi);
+   assert(Display13FBTopology::multiOutputWiring(candidate));
+   // The original full-board policy must survive candidate selection.
+   assert(mixed.dp==(external<<3) && mixed.typeC==mixed.dp);
+  }
+  assert(!w.panelAndComboHDMI().described()); // No firmware HDMI.
+  auto tcOnly=w;tcOnly.hdmi=8;tcOnly.ddc[3]=9;
+  assert(tcOnly.described() && !tcOnly.panelAndComboHDMI().described());
+  auto badCombo=hdmi;badCombo.ddc[1-ddi]=0;
+  assert(!badCombo.panelAndComboHDMI().described());
+  badCombo=hdmi;badCombo.panel=0;assert(!badCombo.panelAndComboHDMI().described());
+  badCombo=hdmi;badCombo.dp=hdmi.hdmi;assert(!badCombo.panelAndComboHDMI().described());
+  badCombo=hdmi;badCombo.valid=false;assert(!badCombo.panelAndComboHDMI().described());
   auto badPolicy=w;badPolicy.dp=w.panel;assert(!badPolicy.panelOnly().described());
   badPolicy=w;badPolicy.valid=false;assert(!badPolicy.panelOnly().described());
   badPolicy=w;badPolicy.panel=0;assert(!badPolicy.panelOnly().described());

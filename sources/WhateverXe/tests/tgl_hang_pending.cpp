@@ -55,6 +55,15 @@ int main() {
  {Fixture f;f.context[0x7c]=7;auto c=f.run();assert(c->q[2]==3 && !f.dataReads);}
  {Fixture f;f.regs[0x94]=1;auto c=f.run();assert(c->q[2]==1 && !f.dataReads);}
  {Fixture f;f.ring[0x40]=1;auto c=f.run();assert(c->q[2]==1 && !f.dataReads);}
+ {Fixture f;f.regs[0x94]=3;f.ring[0x40]=3;
+  auto c=f.run();assert(!c->q[2] && c->q[13]==3 && c->q[11]==1 && c->entries[0].stable);}
+ {Fixture f;f.regs[0x94]=3;auto c=f.run();assert(c->q[2]==1 && !f.dataReads);}
+ {Fixture f;f.ring[0x40]=3;auto c=f.run();assert(c->q[2]==1 && !f.dataReads);}
+ {Fixture f;f.regs[0x95]=1;auto c=f.run();assert(c->q[2]==1 && !f.dataReads);}
+ {Fixture f;f.regs[0x94]=3;f.ring[0x40]=3;f.context[0x7c]=7;
+  auto c=f.run();assert(c->q[2]==3 && !f.dataReads);}
+ {Fixture f;f.regs[0x94]=3;f.ring[0x40]=3;f.mutateCache=true;
+  auto c=f.run();assert(!c->q[2] && !c->entries[0].stable);}
  {Fixture f;f.ring[0x38]=64;auto c=f.run();assert(c->q[2]==1 && !f.dataReads);}
  {Fixture f;f.ring[0x8a0]=64;auto c=f.run();assert(c->q[2]==1 && !f.dataReads);}
  {Fixture f;f.deny=true;auto c=f.run();assert(c->q[2]==2 && !f.dataReads);}

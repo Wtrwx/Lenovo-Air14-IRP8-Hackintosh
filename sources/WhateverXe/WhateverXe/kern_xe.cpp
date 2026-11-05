@@ -3902,6 +3902,13 @@ Display13OutputWiring XE::display13BoardWiring(IOService *provider) {
         // single-output clock/WM path; shared-gate locking stays unchanged.
         board=board.panelOnly();
         IORegistryEntry::getRegistryRoot()->setProperty("WEXDisplay13PanelOnly",board.described());
+    } else if(checkKernelArgument("-wex-edp-combo-hdmi")) {
+        // Separate eDP + fixed Combo HDMI admission from TC/DP-alt startup.
+        // Normal panel-only boots retain priority and cannot be overridden by
+        // an accidentally inherited experimental argument.
+        if(checkKernelArgument("-wex-dsi-adopt") || !xeProfile.mobileDisplay13())return {};
+        board=board.panelAndComboHDMI();
+        IORegistryEntry::getRegistryRoot()->setProperty("WEXDisplay13PanelComboHDMI",board.described());
     }
     if(checkKernelArgument("-wex-dsi-adopt")) {
         // The old HDMI experiment tears down the firmware DSI link. Never

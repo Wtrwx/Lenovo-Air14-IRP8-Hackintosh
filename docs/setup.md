@@ -29,6 +29,8 @@ WhateverXe 应在 Lilu 之后加载，不能同时启用 WhateverGreen。图形�
 
 当前内屏路径使用 `-wex-edp-panel-only`，必须保留。`-igfxdvmt` 与片段里的 framebuffer 内存属性针对本机固定预分配情况，不是适用于所有机器的通用内存扩容设置。
 
+部署前保留可启动的 USB 恢复入口并备份 EFI。除 `ocvalidate`、配置引用和文件内容校验外，还需对目标 EFI 分区做 FAT 文件系统校验，卸载后按系统工具要求检查。macOS 能读取文件、文件哈希一致，并不能覆盖固件对 FAT 长文件名记录的完整性检查；若 OpenCore 报插件 `Info.plist is missing`，也应检查目录元数据。发现错误时先保存原始镜像，再单独修复和验证实际启动。
+
 本机 VBT 使用固件选择的面板标识，需要额外提供 `xelp-panel-edid`：在 iGPU 上添加从**自己面板**取得并校验的 **128 字节 EDID base block**，类型为 Data。出于隐私和硬件匹配要求，仓库未附带该属性值。具体准入规则见 [panel identity selection](../sources/WhateverXe/docs/device-selection.md#firmware-selected-internal-panel)。
 
 ## 背光

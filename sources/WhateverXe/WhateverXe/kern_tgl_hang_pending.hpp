@@ -12,7 +12,7 @@ struct Entry {
 };
 struct Capture {
  // version, time, guard, ring, context, hardware ID, owner ID, stamp index,
- // retired before/after, write index, candidate count, oversize count, reserved.
+ // retired before/after, write index, candidate count, oversize count, engine.
  uint64_t q[16];
  Entry entries[Count];
 };
@@ -25,11 +25,16 @@ template<class Read>
 void collect(Capture &c,uint64_t address,const uint8_t *regs,const uint8_t *ring,Read read) {
  c.q[0]=1;c.q[3]=address;c.q[4]=u64(ring+0x20);
  c.q[5]=(u32(regs+0xac)>>5)&2047;c.q[7]=u32(ring+0x38);c.q[10]=u32(ring+0x8a0);
+ c.q[13]=u32(regs+0x94);
  auto copy=[&](uint64_t p,void *out,unsigned n)->bool {
   return kernelRange(p,n) && read(p,out,n)==n;
  };
  c.q[2]=1;
- if(regs[0x94] || ring[0x40] || c.q[7]>=64 || c.q[10]>=64 ||
+ // These fields and the resource cache belong to the exact donor's common
+ // IGHardwareRingBuffer, shared by RCS and VCS0. Keep other engines closed,
+ // require saved/live engine agreement, and retain every ownership recheck.
+ // Media bytes are evidence only: the RCS graph decoder remains RCS-only.
+ if((c.q[13]!=0 && c.q[13]!=3) || ring[0x40]!=c.q[13] || c.q[7]>=64 || c.q[10]>=64 ||
     !kernelRange(address,0x8a8) || !kernelRange(c.q[4],0x80)) return;
  uint32_t owner=0,retired=0;const uint64_t stamps=u64(ring+0x30);
  c.q[2]=2;

@@ -13,8 +13,8 @@ code=r'''
 #include "kern_display13_firmware.hpp"
 #include "kern_display13_fb_topology.hpp"
 #include "kern_alderlake_s.hpp"
-bool adopt=false,hdmiTrial=false;
-bool checkKernelArgument(const char *s){return !strcmp(s,"-wex-dsi-adopt")?adopt:!strcmp(s,"-wex-dsi-hdmi-test")?hdmiTrial:false;}
+bool adopt=false,hdmiTrial=false,panelOnly=false,comboHDMI=false;
+bool checkKernelArgument(const char *s){return !strcmp(s,"-wex-dsi-adopt")?adopt:!strcmp(s,"-wex-dsi-hdmi-test")?hdmiTrial:!strcmp(s,"-wex-edp-panel-only")?panelOnly:!strcmp(s,"-wex-edp-combo-hdmi")?comboHDMI:false;}
 struct OSData {void *data=nullptr;unsigned bytes=0;void *getBytesNoCopy(){return data;}unsigned getLength(){return bytes;}};
 #define OSDynamicCast(T,p) static_cast<T *>(p)
 struct IOService {OSData *property=nullptr;OSData *getProperty(const char *){return property;}};
@@ -41,6 +41,20 @@ struct XE {
 };
 FUNCTIONS
 int main(){
+ // Replay the actual board-selector policy, including conflicting arguments.
+ XE panel;IOService pp;auto &v=panel.firmwarePorts;v.status=XELP::VBT::Status::Valid;v.present=0xb;
+ v.port[0]={0x78c6,10,0,0x40,0,0};v.port[1]={0x12,1,2,0,0,0,7};v.port[3]={0x60d6,3,0,0x60,0,3};
+ v.panel.valid=v.panel.backlightValid=v.panel.pwmPresent=true;v.panel.ddi=0;v.panel.backlightType=2;v.panel.pwmHz=200;
+ panelOnly=true;auto baseline=panel.display13BoardWiring(&pp);
+ assert(baseline.described() && baseline.selected()==1);
+ comboHDMI=true;assert(panel.display13BoardWiring(&pp).selected()==1);
+ panelOnly=false;auto isolated=panel.display13BoardWiring(&pp);
+ assert(isolated.described() && isolated.panel==1 && isolated.hdmi==2 && isolated.ddc[1]==2 && !isolated.dp && !isolated.typeC);
+ assert(panel.firmwarePorts.present==0xb); // Selection does not rewrite VBT.
+ adopt=true;assert(!panel.display13BoardWiring(&pp).described());adopt=false;
+ auto unsupported=panel;unsupported.xeProfile=XELP::identify(0x46d18086,0);
+ assert(!unsupported.display13BoardWiring(&pp).described());
+ comboHDMI=false;auto complete=panel.display13BoardWiring(&pp);assert(complete.dp==8 && complete.hdmi==2 && complete.panel==1);
  XE dsi;dsi.adlnOutputWiring.valid=true;dsi.adlnOutputWiring.dsi=1;
  dsi.adlnOutputWiring.hdmi=2;dsi.adlnOutputWiring.ddc[1]=2;
  assert(!dsi.xelpBindProbe((void*)1));dsi.dsiResourcesReady=true;

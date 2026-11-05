@@ -5,6 +5,8 @@ build/
 Lilu.kext/
 MacKernelSDK/
 *.kext/
+*.bundle/
+*.dylib
 *.dSYM/
 *.o
 *.a

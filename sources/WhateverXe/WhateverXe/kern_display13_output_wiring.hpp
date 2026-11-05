@@ -27,6 +27,16 @@ struct Display13OutputWiring {
         if(!described() || !panel || dsi)return {};
         Display13OutputWiring w;w.valid=true;w.panel=panel;return w;
     }
+    // A board's fixed Combo HDMI can be qualified independently of its TC
+    // routes. Validate the entire description before selecting the subset;
+    // never invent a DDI, DDC pin or panel to make malformed wiring pass.
+    Display13OutputWiring panelAndComboHDMI() const {
+        const auto combo=hdmi&3U;
+        if(!described() || !panel || dsi || !combo || (combo&(combo-1)))return {};
+        Display13OutputWiring w;w.valid=true;w.panel=panel;w.hdmi=combo;
+        for(unsigned d=0;d<2;++d)if(combo&(1U<<d))w.ddc[d]=ddc[d];
+        return w;
+    }
     enum class Transport {None,TMDS,DP,EDP,DSI};
     Transport transport(unsigned ddi) const {
         if(!described() || ddi>=Ports)return Transport::None;
