@@ -56,12 +56,12 @@ int main() {
         assert(!service((std::string(root)+web).c_str(), Client::WebKitGPU));
     assert(!service(nullptr, Client::WebKitGPU));
     const std::string mtl = "/Library/GPUBundles/AppleIntelTGLGraphicsMTLDriver.bundle/Contents/MacOS/";
-    for (auto name : {"AppleIntelTGLGraphicsMTLDriver", "descriptor.dylib", "impostor.dylib", "libigdmd.dylib"}) {
+    for (auto name : {"AppleIntelTGLGraphicsMTLDriver", "descriptor.dylib", "impostor.dylib", "impostor-original.dylib", "libigdmd.dylib"}) {
         assert(clientForFile((mtl+name).c_str(), true) == Client::WebKitGPU);
         assert(clientForFile(("/System/Volumes/Data"+mtl+name).c_str(), true) == Client::WebKitGPU);
         assert(clientForFile((mtl+name).c_str(), false) == Client::None);
     }
-    for (auto name : {"", "other.dylib", "descriptor.dylib.old", "../Info.plist"})
+    for (auto name : {"", "other.dylib", "descriptor.dylib.old", "impostor-original.dylib.old", "../Info.plist"})
         assert(clientForFile((mtl+name).c_str(), true) == Client::None);
     assert(!service(web, Client::Compiler));
     assert(!service(metal, Client::WebKitGPU));

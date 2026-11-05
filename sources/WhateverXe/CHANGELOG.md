@@ -6,6 +6,7 @@ Use the latest [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphi
 
 ### Added
 
+- Admit the exact original Metal companion path required by the optional MetalLifetimeCompat candidate on Darwin 25.6.0. GPU stability remains unverified.
 - Add an optional internal-eDP-only policy for Alder Lake-N / Twin Lake and mobile Alder/Raptor Lake boards; external display outputs are disabled when selected.
 - Add USB-C DisplayPort Alt Mode output on Alder Lake-class GPUs, including multi-display startup and reconnection.
 - Add experimental MIPI DSI display support with graphics acceleration, brightness control, display off/on, rotation, HiDPI and external-display coexistence. Tested on GPD MicroPC 2 and CHUWI MiniBook X N100 only; do not expect it to work on other devices. System sleep/wake remains unsupported.

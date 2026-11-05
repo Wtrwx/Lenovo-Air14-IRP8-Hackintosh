@@ -47,7 +47,8 @@ inline Client clientForFile(const char *path, bool executable) {
     if (strncmp(path, metal, sizeof(metal)-1)) return Client::None;
     path += sizeof(metal)-1;
     return !strcmp(path, "AppleIntelTGLGraphicsMTLDriver") || !strcmp(path, "descriptor.dylib") ||
-        !strcmp(path, "impostor.dylib") || !strcmp(path, "libigdmd.dylib") ? Client::WebKitGPU : Client::None;
+        !strcmp(path, "impostor.dylib") || !strcmp(path, "impostor-original.dylib") ||
+        !strcmp(path, "libigdmd.dylib") ? Client::WebKitGPU : Client::None;
 }
 inline bool readOnly(int mode) { return mode == 1; } // FREAD, no create/truncate/write flags.
 inline bool executeOnly(int prot, int flags) {

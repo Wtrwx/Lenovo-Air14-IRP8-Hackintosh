@@ -34,8 +34,8 @@
 | USB-C DP Alt Mode 视频输出 | 未解决；与普通 USB、Thunderbolt 分别验证 |
 | 内置扬声器 | AppleALC / SimpleHDA、layout 101 已部署，实际出声已确认；音量和静音待单独验收 |
 | 耳机 / 麦克风 | 耳机输出、耳麦输入待验证；内置 SST 数字麦克风需要单独适配 |
-| 蓝牙 | 当前停用，待单项验证 |
-| 电源键 / Fn | 电源键响应待修复，Fn 暂缓 |
+| 蓝牙 | 固件及兼容组件已加载，但控制器初始化仍失败；尚不可用 |
+| 电源键 / Fn | 电源键候选已部署，实际短按待验证；Fn 最后处理 |
 | CPU 温度 | Raptor Lake-P DTS 插件已验证有效读数、负载变化及再次重启后的读取；P/E 核逐核覆盖未完整验证 |
 | 风扇转速 | 尚未找到并验证本机 RPM 接口 |
 | Thunderbolt | 普通 USB 扩展坞设备可枚举；NHI、热插拔和雷电设备未验证 |
@@ -48,6 +48,7 @@
 - [sources/WhateverXe](sources/WhateverXe)：包含本机适配修改的显卡插件、Compat 源码及原有 CPU 测试。
 - [sources/SMCProcessor](sources/SMCProcessor)：保留 VirtualSMC 的 Raptor Lake-P 温度插件源码、构建方式和能力边界。
 - [sources/NativeAvcCompat](sources/NativeAvcCompat)：原生 H.264 VDEnc 路径的实验性 SPS 兼容源码与 CPU 回放测试；尚未通过硬件编码验收。
+- [sources/MetalLifetimeCompat](sources/MetalLifetimeCompat)：命令缓冲目标表的实验性释放修复；精确 donor CPU 回放与并发寿命检查通过，实机内存增长和 GPU 稳定性尚待验证。
 - [ACPI](ACPI)：背光及触控板的自定义 SSDT 源码。
 - [config](config)：OpenCore 配置片段与 I2C 匹配注入器的 Info.plist。
 - [tools/fix_panel_edid.py](tools/fix_panel_edid.py)：为已核对的同型号面板修正 DisplayID 校验，生成本地显示覆盖候选文件。

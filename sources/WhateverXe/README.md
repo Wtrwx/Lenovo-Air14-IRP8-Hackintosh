@@ -59,6 +59,10 @@ Use the linked **Mod** AMFIPass instead of upstream AMFIPass; do not load both. 
 
 Graphics installs under `/Library` and rebuilds AuxKC without patching System files or snapshots. Restore an old Xe System patch before installing. If you need OCLP for other root patches, use the [custom OCLP build](https://github.com/b00t0x/OpenCore-Legacy-Patcher) with the matching Mod signing chain.
 
+This fork also supports the companion path used by the optional, experimental
+[MetalLifetimeCompat](../MetalLifetimeCompat/README.md) candidate. Its hardware
+and OS limits are narrower than WEX's; GPU stability remains unresolved.
+
 ## Configuration
 
 ### Required boot arguments

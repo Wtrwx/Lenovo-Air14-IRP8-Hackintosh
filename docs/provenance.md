@@ -18,4 +18,6 @@ ACPI 中的 PNLF 和 polling 触控板 SSDT、I2C 匹配注入器、EDID 校验�
 
 当前时钟单位修正已完成 CPU 检查、构建及真实启动读回；这些检查不能替代持续稳定性验证。已知 GPU 挂起、界面卡顿与 WindowServer 内存增长保留为待解决问题。
 
+`sources/MetalLifetimeCompat` 是独立的 MIT 许可源码候选，针对精确 Metal donor 的目标表释放缺口，保留原有兼容组件的字节内容与导出。原驱动片段 CPU 回放、共享所有权保护和并发生命周期检查通过；尚未通过实机稳定性验收。`sources/NativeAvcCompat` 的已部署候选在真实远程使用中仍失败，当前增加的有界状态记录不构成编码或 GPU 修复结论。两者均参考 WhateverXe Graphics 的组件打包方式，Apple 载荷和原始诊断不纳入仓库。
+
 `sources/SMCProcessor` 基于 Acidanthera VirtualSMC 1.3.8 的 SMCProcessor 和公开 SDK，保留原许可、版权及上游文件校验值。新增仅针对物理 Intel family 6 model BA、同时具备核心与封装 DTS 能力的温度路径；不修改 Lilu 的共享 CPU 身份，也不构建或替换 VirtualSMC。该型号不启用未经验证的 RAPL、Voltage 或风扇接口。CPU 准入检查、Release 构建、温度负载变化和再次重启后的读数已验证；原始诊断继续保留在私人工作区。

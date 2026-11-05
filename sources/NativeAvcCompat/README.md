@@ -11,6 +11,8 @@ CPU tests reproduce the invalid doubled slice coordinates in the exact donor and
 verify the projection, caller memory isolation and completion outputs. Hardware
 encoding, remote display and long-term GPU stability are **not verified**. This
 adapter does not repair unrelated render hangs or GPU reset recovery.
+The deployed candidate still failed real remote use. Bounded status messages
+distinguish a mapped module from accepted runtime guards and an actual SPS projection.
 
 Build with:
 

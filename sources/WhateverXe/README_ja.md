@@ -59,6 +59,10 @@ AMFIPassは本家版に代えてリンク先の**Mod版**を使用し、両方�
 
 Graphicsは`/Library`への配置とAuxKC生成を行い、Systemファイルやsnapshotにはパッチしません。旧Xe System patchは先に復元してください。他のroot patchのためにOCLPを使う場合は、同じMod署名に対応する[独自ビルド版OCLP](https://github.com/b00t0x/OpenCore-Legacy-Patcher)を使用します。
 
+このforkは、任意導入の実験的な[MetalLifetimeCompat](../MetalLifetimeCompat/README_ja.md)
+候補が使うコンパニオンのパスにも対応します。同候補のハードウェアとOSの対象範囲は
+WEXより狭く、GPUの安定性は引き続き未解決です。
+
 ## 設定
 
 ### 必須ブート引数

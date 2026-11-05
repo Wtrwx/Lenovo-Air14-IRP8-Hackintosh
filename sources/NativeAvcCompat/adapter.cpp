@@ -14,6 +14,7 @@
 #include <sys/sysctl.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <os/log.h>
 #endif
 
 using Complete = uint32_t (*)(void *, void *, void *);
@@ -29,8 +30,14 @@ static bool readSpan(const void *source, void *target, size_t size) {
 }
 
 static uint32_t reject(const char *reason) {
-    if (rejected.fetch_add(1, std::memory_order_relaxed) < 8)
+    if (rejected.fetch_add(1, std::memory_order_relaxed) < 8) {
+#ifdef NATIVEAVC_TESTING
         std::fprintf(stderr, "NativeAvcCompat: rejected native AVC input (%s)\n", reason);
+#else
+        os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEFAULT,
+            "NativeAvcCompat ABI2: rejected native AVC input (%{public}s)", reason);
+#endif
+    }
     return 5; // Existing donor's invalid/unsupported-input status, before submit.
 }
 
@@ -90,9 +97,15 @@ static uint32_t invoke(void *context, void *job, void *output, Complete original
     if (mach_vm_write(mach_task_self(), reinterpret_cast<mach_vm_address_t>(inputFrame) + 0x498,
               reinterpret_cast<vm_offset_t>(frame.data() + 0x498), 12) != KERN_SUCCESS)
         return reject("statistics output span");
-    if (converted.fetch_add(1, std::memory_order_relaxed) == 0)
+    if (converted.fetch_add(1, std::memory_order_relaxed) == 0) {
+#ifdef NATIVEAVC_TESTING
         std::fprintf(stderr, "NativeAvcCompat: projected native AVC SPS, %ux%u MB, %u slices\n",
                      widthMb, heightMb, count);
+#else
+        os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEFAULT,
+            "NativeAvcCompat ABI2: projected native AVC SPS, %ux%u MB, %u slices", widthMb, heightMb, count);
+#endif
+    }
     return status;
 }
 
@@ -170,7 +183,10 @@ static bool uuid(const mach_header_64 *header, const uint8_t expected[16]) {
 __attribute__((constructor)) static void start() {
     char release[32] {}; size_t length = sizeof(release);
     if (sysctlbyname("kern.osrelease", release, &length, nullptr, 0) ||
-        std::strcmp(release, "25.6.0") || !physicalGpu()) return;
+        std::strcmp(release, "25.6.0") || !physicalGpu()) {
+        os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEFAULT,
+            "NativeAvcCompat ABI2: OS/physical GPU guard rejected"); return;
+    }
     constexpr const char *path = "/Library/GPUBundles/AppleIntelTGLGraphicsVADriver.bundle/Contents/MacOS/AppleIntelTGLGraphicsVADriver";
     constexpr const char *bridge = "/Library/GPUBundles/AppleIntelTGLGraphicsVADriver.bundle/Contents/MacOS/TGLVAOriginal";
     constexpr uint8_t donorUuid[] = {0x00,0x20,0x40,0x00,0x02,0x63,0x40,0x92,0xb4,0x83,0xcc,0x25,0x44,0xd2,0x63,0x50};
@@ -186,15 +202,24 @@ __attribute__((constructor)) static void start() {
         // Pin the complete executable/constant payload, excluding the Mach-O
         // header and signature that change when sealing the enclosing bundle.
         !fileHash(path, "3af22e872e2312035f4603b70b28c2fd5fb47a274ef21a40abf5446911cbf30f", 0x1160, 0x754000 - 0x1160) ||
-        !fileHash(bridge, "cbf0a308a536d2d54565684025d32b200649681aa2fda45dd46bdfdb77b3da9e")) return;
+        !fileHash(bridge, "cbf0a308a536d2d54565684025d32b200649681aa2fda45dd46bdfdb77b3da9e")) {
+        os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEFAULT,
+            "NativeAvcCompat ABI2: mapped image/immutable payload guard rejected"); return;
+    }
     imageBase = reinterpret_cast<uintptr_t>(driver);
     auto slot = reinterpret_cast<uintptr_t *>(imageBase + 0x754a90);
     const auto expected = imageBase + 0x27724;
     constexpr uint8_t prologue[] = {0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,0x48,0x83,0xec,0x18,0x49,0x89,0xd6};
-    if (*slot != expected || std::memcmp(reinterpret_cast<void *>(expected), prologue, sizeof(prologue))) return;
+    if (*slot != expected || std::memcmp(reinterpret_cast<void *>(expected), prologue, sizeof(prologue))) {
+        os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEFAULT,
+            "NativeAvcCompat ABI2: completion vtable/prologue guard rejected"); return;
+    }
     const auto page = reinterpret_cast<mach_vm_address_t>(slot) & ~(static_cast<uint64_t>(vm_page_size) - 1);
     if (mach_vm_protect(mach_task_self(), page, vm_page_size, false,
-                        VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY)) return;
+                        VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY)) {
+        os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEFAULT,
+            "NativeAvcCompat ABI2: completion page protection rejected"); return;
+    }
     originalComplete = reinterpret_cast<Complete>(expected);
     uintptr_t current = expected;
     const bool changed = __atomic_compare_exchange_n(slot, &current, reinterpret_cast<uintptr_t>(&complete),
@@ -202,8 +227,13 @@ __attribute__((constructor)) static void start() {
     if (mach_vm_protect(mach_task_self(), page, vm_page_size, false, VM_PROT_READ)) {
         if (changed) __atomic_store_n(slot, expected, __ATOMIC_RELEASE);
         mach_vm_protect(mach_task_self(), page, vm_page_size, false, VM_PROT_READ);
+        os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEFAULT,
+            "NativeAvcCompat ABI2: completion protection restore failed; adapter rolled back");
         return;
     }
-    if (changed) std::fprintf(stderr, "NativeAvcCompat: exact native AVC completion adapter installed\n");
+    if (changed) os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEFAULT,
+        "NativeAvcCompat ABI2: exact native AVC completion adapter installed");
+    else os_log_with_type(OS_LOG_DEFAULT, OS_LOG_TYPE_DEFAULT,
+        "NativeAvcCompat ABI2: concurrent completion change; adapter not installed");
 }
 #endif
