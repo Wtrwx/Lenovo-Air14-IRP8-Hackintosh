@@ -17,7 +17,7 @@ WindowServer 的内存统计还出现过异常大数值和持续增长，仍需�
 ## 外设
 
 - 声卡尚无可用的 CoreAudio 设备。AppleALC/SimpleHDA 候选没有完成本机验证。Intel SST 数字麦克风不能仅靠 AppleALC 支持。
-- 蓝牙已启用 IntelBluetoothFirmware / IntelBTPatcher 2.5.3，控制器启动和接收 AirPods 状态广播已有记录。仍有 bluetoothd 连续崩溃、设置等待及耳机偶发无声；发现系统文件代码页哈希不一致和 APFS 压缩数据读取错误。当前服务运行不代表稳定性恢复，详见 [状态更新](status-2026-11-07.md)。
+- 蓝牙已启用 IntelBluetoothFirmware / IntelBTPatcher 2.5.3，控制器启动和接收 AirPods 状态广播已有记录。仍有 bluetoothd 连续崩溃、设置等待及耳机偶发无声；历史报告包含 APFS 压缩数据读取错误；代码页哈希差异至少部分来自 BlueToolFixup 已知补丁，不能直接当作磁盘损坏。当前服务运行不代表稳定性恢复，详见 [状态更新](status-2026-11-07.md)。
 - 原生 UVC 摄像头的实际预览、应用访问和 90 秒持续原始帧采集已验证，无需额外摄像头驱动。视频通话、视频编码和长时间使用未验证；原始帧测试也出现过较长帧间隔。
 - USB-C 扩展坞的普通 USB 枚举不等于 Thunderbolt NHI、雷电热插拔或 USB-C 视频已支持。
 - CPU 封装温度已验证读数、负载变化和重启持久性；逐个 P/E 核的独立温度覆盖尚未完整验证。温度插件不提供风扇转速；本机 RPM 接口和电源键响应仍需适配。未发布未经核对的 EC 手动调速方案。

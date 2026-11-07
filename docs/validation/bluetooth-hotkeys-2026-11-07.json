@@ -28,7 +28,14 @@
     "daemonRunningAt1701AfterReboot": true,
     "signatureVerificationPassed": false,
     "systemRepairPerformed": false,
-    "stabilityResolved": false
+    "stabilityResolved": false,
+    "liveSystemVolumeVerificationExitCode": 0,
+    "loadedBlueToolFixupVersion": "2.7.2",
+    "currentBootMismatchedPagesObserved": 2,
+    "atLeastOnePageFullyExplainedByKnownBlueToolFixupPatch": true,
+    "signatureMismatchAloneProvesDiskCorruption": false,
+    "headphonesConnectedDuringAudioInspection": false,
+    "defaultAudioOutputDuringInspection": "Built-in Output"
   },
   "hotkeys": {
     "helperVersion": "1.2.0",
