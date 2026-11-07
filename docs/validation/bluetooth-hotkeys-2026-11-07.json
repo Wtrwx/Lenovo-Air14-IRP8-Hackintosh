@@ -1,0 +1,46 @@
+{
+  "date": "2026-11-07",
+  "systemBuild": "25G332",
+  "bluetooth": {
+    "firmwareVersion": "2.5.3",
+    "patcherVersion": "2.5.3",
+    "controllerInitializationObserved": true,
+    "airpodsStatusAdvertisementsObserved": true,
+    "pairingValidated": false,
+    "userReportedIntermittentHeadphoneSilence": true,
+    "historicalDaemonConsecutiveCrashes": 16,
+    "historicalSignal": "SIGBUS",
+    "historicalAPFSCompressedDataHashMismatch": true,
+    "codePageChecks": {
+      "bluetoothd": {
+        "checked": 2885,
+        "mismatched": 4
+      },
+      "BlueTool": {
+        "checked": 76,
+        "mismatched": 0
+      },
+      "bluetoothuserd": {
+        "checked": 152,
+        "mismatched": 0
+      }
+    },
+    "daemonRunningAt1701AfterReboot": true,
+    "signatureVerificationPassed": false,
+    "systemRepairPerformed": false,
+    "stabilityResolved": false
+  },
+  "hotkeys": {
+    "helperVersion": "1.2.0",
+    "backgroundLaunchObserved": true,
+    "accessibilityAndAutoEnableObserved": true,
+    "volumeAndBrightnessSuccessObserved": true,
+    "historicalCallbackChecksPassed": 87,
+    "callbackChecksCoverCorrectFnLockSemantics": false,
+    "fnLockFixImplemented": false,
+    "uiRedesignImplemented": false,
+    "reloginValidated": false,
+    "firmwareBridgeLoadedInPriorCheck": false
+  },
+  "scope": "Status documentation only; no system binaries, EFI, personal identifiers or raw logs"
+}

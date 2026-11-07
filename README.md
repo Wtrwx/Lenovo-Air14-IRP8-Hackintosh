@@ -33,14 +33,14 @@
 | 机身 HDMI 输出 | 未解决；当前策略禁用外部显示输出 |
 | USB-C DP Alt Mode 视频输出 | 未解决；与普通 USB、Thunderbolt 分别验证 |
 | 声卡 / 麦克风 | 未解决；内置 SST 数字麦克风需要单独适配 |
-| 蓝牙 | 当前停用，待单项验证 |
-| 电源键 / Fn | 电源键响应待修复，Fn 暂缓 |
+| 蓝牙 | 已启用 IntelBluetoothFirmware / IntelBTPatcher 2.5.3；可接收设备广播，仍有服务崩溃及耳机偶发无声 |
+| 电源键 / Fn | 电源键待修复；热键后台助手已运行，音量 / 亮度操作成功，FnLock 逻辑及其余组合键待修复验证 |
 | CPU 温度 | Raptor Lake-P DTS 插件已验证有效读数、负载变化及再次重启后的读取；P/E 核逐核覆盖未完整验证 |
 | 风扇转速 | 尚未找到并验证本机 RPM 接口 |
 | Thunderbolt | 普通 USB 扩展坞设备可枚举；NHI、热插拔和雷电设备未验证 |
 | Apple 账户 | 登录后退出及 App Store 登录失败尚未解决 |
 
-详细限制见 [已知问题](docs/known-issues.md)。
+详细限制见 [已知问题](docs/known-issues.md)。蓝牙与热键的最新进展、故障证据及验证边界见 [2026-11-07 状态更新](docs/status-2026-11-07.md)。
 
 ## 仓库内容
 
