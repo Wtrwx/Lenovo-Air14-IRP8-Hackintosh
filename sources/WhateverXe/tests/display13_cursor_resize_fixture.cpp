@@ -15,12 +15,13 @@ using IOService=OSObject;
 struct Map {std::map<uint32_t,uint32_t> r;};
 struct Display13FBDBUFIO {Map *map;uint32_t read(uint32_t reg){assert(map->r.count(reg));return map->r[reg];}};
 static unsigned selectedPipe;
+static bool bindingAccepted=true;
 namespace TGLFBBinding {
  enum class Status {Unavailable,Complete};
  struct Object {void *p;unsigned size;};
  struct Objects {Object controller,fb,path,plane,port;unsigned owner;bool logical;};
  struct Result {Status status;unsigned framebuffer,pipe,ddi,plane;};
- Result inspect(const Objects&,void*,unsigned){return {Status::Complete,selectedPipe,selectedPipe,selectedPipe,0};}
+ Result inspect(const Objects&,void*,unsigned){return {bindingAccepted?Status::Complete:Status::Unavailable,selectedPipe,selectedPipe,selectedPipe,0};}
 }
 struct Pipe {IOService *memoryFramebuffer{};uint64_t watermarkClockHz{};Display13WM::Plan wm[2];};
 struct Power {
@@ -53,7 +54,7 @@ void setup(Map &map,unsigned pipe,uint32_t oldControl,uint32_t width){
  memset(ctl,0,sizeof(ctl));memset(fb,0,sizeof(fb));memset(path,0,sizeof(path));memset(plane,0,sizeof(plane));
  ((OSObject*)ctl)->size=sizeof(ctl);((OSObject*)fb)->size=sizeof(fb);
  ((OSObject*)path)->size=sizeof(path);((OSObject*)plane)->size=sizeof(plane);
- selectedPipe=pipe;display13FBPower={};auto &c=display13FBPower;
+ selectedPipe=pipe;bindingAccepted=true;display13FBPower={};auto &c=display13FBPower;
  c.lock=&mutex;c.controller=(IOService*)ctl;c.map=&map;c.engineEnabled=true;c.dbuf.begun=true;
  c.pipe[pipe].memoryFramebuffer=(IOService*)fb;
  c.dbuf.pipe[pipe].cursor=pipe?Display13DBUF::Range{2048,2088}:Display13DBUF::Range{0,40};
@@ -84,5 +85,22 @@ int main(){
  }
  Map map;setup(map,0,0x10000027,256);display13FBPower.dbuf.pipe[0].cursor={0,0};
  XE::adlnWMSetup((OSObject*)plane,(OSObject*)path,true);assert(display13FBPower.watermarkFaulted);
- assert(!locks);puts("production cursor WM: 27 size transitions, post-apply mismatch and invalid input checks passed");
+ // A rejected or retired callback has no authority over any active pipe.
+ // Exercise both primary/cursor and both binding/owner rejection paths.
+ for(bool cursor:{false,true})for(unsigned rejection=0;rejection<3;++rejection){
+  Map rejected;setup(rejected,0,0x10000027,64);
+  auto &c=display13FBPower;
+  c.pipe[0].watermarkClockHz=111;c.pipe[1].watermarkClockHz=222;
+  c.pipe[0].wm[0].width=123;c.pipe[1].wm[1].width=456;
+  if(rejection==0)bindingAccepted=false;
+  if(rejection==1)c.pipe[0].memoryFramebuffer=nullptr;
+  if(rejection==2)selectedPipe=UINT32_MAX;
+  rejected.r.clear(); // Any MMIO read fails the fixture immediately.
+  XE::adlnWMSetup((OSObject*)plane,(OSObject*)path,cursor);
+  assert(!c.watermarkFaulted);
+  assert(c.pipe[0].watermarkClockHz==111 && c.pipe[1].watermarkClockHz==222);
+  assert(c.pipe[0].wm[0].width==123 && c.pipe[1].wm[1].width==456);
+  assert(IORegistryEntry::getRegistryRoot()->getProperty("N97FBWMRejectedBinding"));
+ }
+ assert(!locks);puts("production cursor WM: 27 size transitions, invalid owner inputs, and 6 rejected callback isolation cases passed");
 }

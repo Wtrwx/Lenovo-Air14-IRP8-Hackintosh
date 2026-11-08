@@ -9546,6 +9546,15 @@ void XE::adlnWMSetup(OSObject *plane,OSObject *path,bool cursor) {
 	// framebuffer index, physical DDI nor aperture slot selects a WM bank.
 	// This calculation does not publish/admit a secondary memory owner.
 	const bool associated=fb && pipe<3 && Display13FBMemory::boundPipe(c.pipe,fb)==pipe;
+	// A retired/unselected native path cannot invalidate watermarks for the
+	// active owners. Reject before reading MMIO or replacing any pipe plan.
+	// Invalid inputs on a proven live owner still take the fault path below.
+	if(!associated) {
+		uint64_t rejected[] {1,cursor,static_cast<uint32_t>(binding.status),pipe,binding.framebuffer,binding.ddi};
+		IOLockUnlock(c.lock);
+		IORegistryEntry::getRegistryRoot()->setProperty("N97FBWMRejectedBinding",rejected,sizeof(rejected));
+		return;
+	}
 	inputs[0]=2;inputs[1]=cursor;inputs[2]=associated;
 	inputs[3]=callbackXE->display13FBWatermarkHooksReady;inputs[4]=c.engineEnabled;inputs[5]=c.dbuf.begun;
 	inputs[6]=c.bridge.state.faulted;inputs[7]=c.clockFaulted;inputs[8]=c.memoryFaulted;
@@ -9613,6 +9622,11 @@ void XE::adlnWMSetup(OSObject *plane,OSObject *path,bool cursor) {
 	IORegistryEntry::getRegistryRoot()->setProperty(cursor ? "N97FBCursorWM" : "N97FBPrimaryWM",record,sizeof(record));
 	IORegistryEntry::getRegistryRoot()->setProperty("N97FBBinding",bindingRecord,sizeof(bindingRecord));
 	auto root=IORegistryEntry::getRegistryRoot();
+	if(p.status!=Display13WM::Status::Complete && !root->getProperty("N97FBWMFirstFailureInputs")) {
+		root->setProperty("N97FBWMFirstFailureInputs",inputs,sizeof(inputs));
+		root->setProperty("N97FBWMFirstFailurePlan",record,sizeof(record));
+		root->setProperty("N97FBWMFirstFailureBinding",bindingRecord,sizeof(bindingRecord));
+	}
 	if(pipe<3) {
 		char property[48];snprintf(property,sizeof(property),"N97FBPipe%u%sWM",pipe,cursor ? "Cursor" : "Primary");
 		root->setProperty(property,record,sizeof(record));

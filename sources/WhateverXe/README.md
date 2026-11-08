@@ -94,6 +94,8 @@ These settings are unnecessary at 96MB and do not increase firmware-allocated me
 
 The common regression checks cover Metal, OpenGL, OpenCL, hardware H.264 encode/decode and HEVC decode. The table summarizes OS coverage and configuration-specific display features.
 
+Standalone framebuffer tests also check that rejected display-path callbacks leave active watermark plans intact; these CPU checks do not establish hardware sleep/wake or restart reliability.
+
 | Configuration | Verified coverage |
 | --- | --- |
 | Tiger Lake mini PCs | Big Sur–Tahoe: 80 EU, two 1080p60 displays, display off/on, Safari video and Widevine |
