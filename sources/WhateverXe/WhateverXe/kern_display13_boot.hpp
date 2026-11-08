@@ -130,7 +130,7 @@ template<class IO> Result normalize(IO &io,const AlderLakeN::DisplayReadout &boo
     if(!admitted || &boot==&scratch.after)return r;
     r.status=Status::Topology;
     const auto active=boot.activePipes;
-    if(w.panel || !memory.valid || !Display13FBTopology::multiOutputWiring(w) || boot.status!=AlderLakeN::ReadoutStatus::Complete ||
+    if(w.dsi || !memory.valid || !Display13FBTopology::multiOutputWiring(w) || boot.status!=AlderLakeN::ReadoutStatus::Complete ||
        !(active&1) || active==1 || (active&~7U) || (active&~boot.poweredPipes))return r;
     uint32_t ports[3] {},clocks[3] {},transport[3] {},used=0,dpPipes=0;
     auto &tc=scratch.tc;
@@ -159,6 +159,11 @@ template<class IO> Result normalize(IO &io,const AlderLakeN::DisplayReadout &boo
         const auto port=Display13FBTopology::bootDDI(w,trans,true);
         if(port>=7 || (used&(1U<<port)))return r;
         const bool dp=((trans>>24)&7)==2;
+        const bool panel=w.panel&(1U<<port);
+        // Keep a firmware eDP GOP only on pipe A. Parking an internal panel
+        // needs its own power/sequencing contract; never send it through the
+        // external DP shutdown path or reinterpret a different primary GOP.
+        if(w.panel && ((p==0)!=panel || (panel && !dp)))return r;
         if(port>=3) {
             tc[p]=Display13TC::Boot::capture(io,true,port,p,dp);
             if(!tc[p].valid() || tc[p].power!=power || tc[p].ddiPower!=ddiPower)return r;
@@ -169,7 +174,7 @@ template<class IO> Result normalize(IO &io,const AlderLakeN::DisplayReadout &boo
                (!io.readable(aux) || (io.read(aux)&0x80000000U)))return r;
         }
         if(dp) {
-            if(!AlderLakeN::dpSource(boot,p,port,port>=3?&tc[p]:nullptr))return r;
+            if(!AlderLakeN::dpSource(boot,p,port,port>=3?&tc[p]:nullptr,panel))return r;
             dpPipes|=1U<<p;AlderLakeN::value(boot,0x60540+bank,transport[p]);
         }
         ports[p]=port;used|=1U<<port;
@@ -184,7 +189,7 @@ template<class IO> Result normalize(IO &io,const AlderLakeN::DisplayReadout &boo
         if(!AlderLakeN::bootGeometry(boot,p,geometry,ht,vt) || uint64_t(surface)+geometry.bytes>memory.usable())return r;
         const auto clock=0x46140+4*p,buf=0x64000+0x100*port;
         if(!io.readable(clock) || !io.readable(buf) || !(io.read(buf)&0x80000000) ||
-           !io.readable(0x60404+bank) || io.read(0x60404+bank))return r;
+           !io.readable(0x60404+bank) || (io.read(0x60404+bank)&~(panel?8U:0U)))return r;
         clocks[p]=io.read(clock);
         if(clocks[p]==UINT32_MAX || (clocks[p]>>28)!=port+(port>=3?3:1))return r;
     }

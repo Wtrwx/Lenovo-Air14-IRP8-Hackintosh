@@ -7,11 +7,13 @@ Use the latest [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphi
 ### Added
 
 - Add an optional internal-eDP-only policy for Alder Lake-N / Twin Lake and mobile Alder/Raptor Lake boards; external display outputs are disabled when selected.
+- Add an optional eDP and fixed Combo HDMI policy for the same boards, retaining qualified firmware routes while excluding DisplayPort and Type-C outputs.
 - Add USB-C DisplayPort Alt Mode output on Alder Lake-class GPUs, including multi-display startup and reconnection.
 - Add experimental MIPI DSI display support with graphics acceleration, brightness control, display off/on, rotation, HiDPI and external-display coexistence. Tested on GPD MicroPC 2 and CHUWI MiniBook X N100 only; do not expect it to work on other devices. System sleep/wake remains unsupported.
 
 ### Fixed
 
+- Allow firmware multi-display startup to retain a qualified internal eDP primary display while retiring external boot scanouts, preserving panel sequencing and source-state checks.
 - Correct Display 13 watermark bandwidth admission for uncompressed RGB scanout by converting the donor clock ABI to physical CDCLK before applying the two-pixels-per-clock requirement. Preserve timing, cursor, register-readback and live-surface checks. This does not resolve the separate intermittent GPU render hang.
 - Accept partial final pages in framebuffer aperture surfaces while validating the full mapped extent, and preserve hotplug-only interrupts during internal eDP display wake. Based on the [eDP report and fixes](https://github.com/b00t0x/WhateverXe/issues/22).
 - Fix graphics initialization and acceleration on additional supported Tiger Lake and Alder/Raptor Lake GPU variants, including single-channel configurations.

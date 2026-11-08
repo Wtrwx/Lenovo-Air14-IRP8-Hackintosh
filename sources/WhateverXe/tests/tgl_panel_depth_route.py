@@ -53,6 +53,7 @@ struct XE {
  Ports firmwarePorts;mach_vm_address_t orgTGLModeTiming;
  static uint32_t tglPanelDepthPort(void *);
  static void wrapTGLModeTiming(void *,void *,void *);
+ static void configureDisplay13HDMISDR(void *,void *){}
 } state,*callbackXE=&state;
 struct TGLPanelDepthCache {void *port;uint32_t maximum;};
 TGLPanelDepthCache tglPanelDepthCache[2];

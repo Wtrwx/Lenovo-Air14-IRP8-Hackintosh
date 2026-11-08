@@ -27,6 +27,15 @@ struct Display13OutputWiring {
         if(!described() || !panel || dsi)return {};
         Display13OutputWiring w;w.valid=true;w.panel=panel;return w;
     }
+    // Retain the qualified eDP panel and fixed Combo HDMI routes only.
+    // Validate the complete input before filtering; a policy cannot repair
+    // malformed firmware or turn a Type-C route into a Combo connector.
+    Display13OutputWiring panelAndHDMIOnly() const {
+        if(!described() || !panel || dsi || !(hdmi&3U))return {};
+        Display13OutputWiring w;w.valid=true;w.panel=panel;w.hdmi=hdmi&3U;
+        for(unsigned d=0;d<2;++d)if(w.hdmi&(1U<<d))w.ddc[d]=ddc[d];
+        return w;
+    }
     enum class Transport {None,TMDS,DP,EDP,DSI};
     Transport transport(unsigned ddi) const {
         if(!described() || ddi>=Ports)return Transport::None;

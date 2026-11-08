@@ -69,6 +69,70 @@ static Display13OutputWiring protocols(unsigned dpMask) {
     for(unsigned d=0;d<3;++d)if(!(w.hdmi&(1U<<d)))w.ddc[d]=0;
     assert(w.described());return w;
 }
+static Display13OutputWiring panelGOP(IO &io,unsigned panel,unsigned secondary,
+                                    unsigned lanes=4,bool enhanced=true) {
+    const auto bank=secondary*0x1000;
+    if(secondary==2) {
+        for(auto reg:{0x70008U,0x70180U,0x70188U,0x70190U,0x60000U,0x6000CU,0x7027CU})
+            io.regs[reg+bank]=io.regs[reg];
+        io.regs[0x61400]=io.regs[0x71008]=io.regs[0x71180]=0;
+        io.regs[0x46144]=0;
+    }
+    const auto external=1-panel;
+    dp(io,0,panel,lanes,enhanced);
+    io.regs[0x46140]=(panel+1)<<28;
+    io.regs[0x60400+bank]=0x80030100|((external+1)<<27);
+    io.regs[0x46140+4*secondary]=(external+1)<<28;
+    Display13OutputWiring w;w.valid=true;w.panel=1U<<panel;
+    w.hdmi=1U<<external;w.ddc[external]=external+1;
+    assert(w.described());return w;
+}
+static void retainedPanelBoot() {
+    unsigned cases=0;
+    for(unsigned panel:{0U,1U})for(unsigned secondary:{1U,2U})
+    for(unsigned lanes:{1U,2U,4U})for(bool enhanced:{false,true})
+    for(uint32_t ctl2:{0U,8U})for(uint32_t panelTraining:{0U,64U}) {
+        IO io;const auto w=panelGOP(io,panel,secondary,lanes,enhanced);
+        io.regs[0x60404]=ctl2;io.regs[0x60540]|=panelTraining;
+        const auto boot=AlderLakeN::readDisplay(io,true);const auto before=io.regs;
+        assert(AlderLakeN::dpSource(boot,0,panel,nullptr,true));
+        const auto r=normalize(io,boot,true,w,memory);
+        assert(r.status==Display13Boot::Status::Complete && r.after==1 && r.writes==10);
+        // The existing stop sequence may touch only the external GOP. Keep
+        // every captured panel/shared word, including CTL2 and training bits.
+        const auto b=secondary*0x1000,buffer=0x64000+0x100*(1-panel);
+        for(auto write:io.writes)assert(write.offset==0x70180+b || write.offset==0x7019C+b ||
+            write.offset==0x70008+b || write.offset==0x60404+b || write.offset==0x60400+b ||
+            write.offset==buffer || write.offset==0x46140+4*secondary ||
+            write.offset==0x7027C+b || write.offset==0x7037C+b || write.offset==0x7017C+b);
+        for(auto pair:before) {
+            bool written=false;for(auto write:io.writes)written|=write.offset==pair.first;
+            if(!written && pair.first!=0x4500C && pair.first!=0x70040 && pair.first!=0x71040 && pair.first!=0x72040)
+                assert(io.regs[pair.first]==pair.second);
+        }
+        assert(io.regs[0x60404]==ctl2 && io.regs[0x60540]==before.at(0x60540));++cases;
+    }
+    // Internal eDP exceptions cannot authorize external DP state, sync,
+    // compression, stale witnesses or an attempt to park the panel itself.
+    for(unsigned fault=0;fault<10;++fault) {
+        IO io;auto w=panelGOP(io,0,1);io.regs[0x60404]=8;io.regs[0x60540]|=64;
+        if(fault==0)io.regs[0x60404]|=0x10;
+        if(fault==1)io.regs[0x60540]|=0x80;
+        if(fault==2)io.regs[0x78000]|=1U<<29;
+        if(fault==3)io.regs[0x60034]=0;
+        if(fault==4)io.regs[0x61404]=8;
+        if(fault==5) {w.panel=2;w.hdmi=1;w.ddc[0]=1;w.ddc[1]=0;}
+        if(fault==6) {w.panel=0;w.dp=1;}
+        if(fault==7) {dp(io,1,1,4,true);io.regs[0x61540]|=64;w.hdmi=0;w.ddc[1]=0;w.dp=2;}
+        if(fault==8)w.dsi=1;
+        auto boot=AlderLakeN::readDisplay(io,true);
+        if(fault==9)io.regs[0x60540]^=64;
+        const auto r=normalize(io,boot,true,w,memory);
+        assert(r.status!=Display13Boot::Status::Complete && io.writes.empty());
+    }
+    puts("PASS retained eDP bootstrap: external-only STOP, panel power/protocol preservation and invalid-source refusal");
+    printf("PASS %u primary eDP/secondary HDMI bootstrap combinations\n",cases);
+}
 static IO singleGOP(unsigned ddi,unsigned pipe=0) {
     IO io;
     for(unsigned p=0;p<3;++p) {
@@ -367,6 +431,7 @@ int main() {
     scaledBoot();
     prefixCertificates();
     tcComposition();
+    retainedPanelBoot();
     IO io;const auto before=io.regs;
     const auto r=normalize(io,AlderLakeN::readDisplay(io,true),true,wiring,memory);
     assert(r.status==Display13Boot::Status::Complete && r.after==1 && r.stage==7 && r.writes==10);

@@ -384,6 +384,14 @@ private:
     static uint32_t wrapAlderLakeNConnectionAttr(IOService *fb,int connection,uint32_t attribute,unsigned long *value);
     static uint32_t wrapDisplay13FBDDC(IOService *fb,int connection,uint32_t block,uint32_t segment,uint32_t type,uint8_t *data,uint64_t *length);
     static uint32_t wrapAlderLakeNPortDDC(OSObject *port,uint32_t block,uint8_t *data,bool force);
+    mach_vm_address_t orgDisplay13HDMIOnline {};
+    static uint32_t wrapDisplay13HDMIOnline(IOService *fb,OSObject *path,uint8_t *online,uint8_t *changed);
+    static void configureDisplay13HDMIGCP(void *controller,void *fb,void *path);
+    static void configureDisplay13HDMISDR(void *fb,void *timing);
+    mach_vm_address_t display13HDMII2CRequest {};
+    static bool prepareDisplay13HDMISCDC(void *,void *,void *,const void *);
+    static bool display13HDMISCDCTransfer(void *,void *,void *,bool,uint8_t,uint8_t &);
+    static bool display13HDMISCDCOwned(void *,void *,void *);
     static uint32_t wrapDisplay13GMBusRead(void *access,uint64_t reg);
     static void wrapDisplay13GMBusWrite(void *access,uint64_t reg,uint32_t value);
     mach_vm_address_t orgAlderLakeNGamma10 {},adlnGammaTableUpdate {},orgAlderLakeNPreGamma {};
@@ -835,6 +843,8 @@ private:
 	static void wrapTGLBlitDeferredInit(void *context,void *params,const void *rects);
 	mach_vm_address_t orgTGLSurfaceAux {};
 	static void wrapTGLSurfaceAux(void *resource, void *entry, uint32_t *surface, uint32_t intent);
+	mach_vm_address_t orgTGLVideoBatch {};
+	static bool wrapTGLVideoBatch(void *,uint64_t,uint32_t,uint32_t *,uint32_t,bool,bool);
 	mach_vm_address_t orgTGLHangRingDump {};
 	static void wrapTGLHangRingDump(void *ring, void *registers);
 	mach_vm_address_t orgTGLRecovery {};

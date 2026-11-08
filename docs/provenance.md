@@ -5,7 +5,8 @@
 本地修改主要包括：
 
 - 固件 VBT 的面板类型为 `0xff` 时，使用调用方提供的有效 EDID base block 做有界、唯一的 PNP 身份匹配。
-- 显式 `-wex-edp-panel-only` 策略，限制为已经通过固件准入的内屏，禁用外部输出。
+- 显式 `-wex-edp-hdmi-only` 策略保留通过固件准入的内屏和固定 HDMI；原 `-wex-edp-panel-only` 保留为恢复策略。
+- HDMI 根据 EDID 能力调整源端时钟上限，通过 SCDC 协商 HDMI 2.0；为标准 SCDC 请求补充有界的真实 GMBUS 就绪轮询，修正 SDR 深度和颜色数据包配置。寄存器定义参考 Linux i915。
 - 保留符合条件的 eDP 固件 handoff 状态，区分内屏与外部接口的控制字段。
 - 接受 framebuffer 映射最后不足一整页的合法范围，并保留完整映射范围检查。
 - 内屏中断恢复与热插拔专用中断路径的修正。

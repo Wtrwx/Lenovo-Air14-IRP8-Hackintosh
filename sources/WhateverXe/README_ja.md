@@ -87,6 +87,7 @@ BIOS/UEFIで設定できる場合は、**DVMT Pre-Allocatedを96MB**にします
 - GPUは自動選択するため、通常は`device-id`上書きは不要です。
 - ファームウェアが選択する内蔵パネルでは、検証済みEDIDによる[パネル識別](docs/device-selection.md#firmware-selected-internal-panel)を利用できます。
 - Alder Lake-N / Twin LakeとAlder Lake-H/P/U / Raptor Lake-H/Pでは、`-wex-edp-panel-only`で検証済みeDP構成を内蔵パネルのみに制限し、すべての外部映像出力を無効にできます。
+- 同じGPUでは、`-wex-edp-hdmi-only`で検証済みeDPパネルと固定Combo HDMI出力を維持し、DisplayPortとType-Cの映像経路を無効にできます。両方の出力に有効なファームウェアルーティングが必要です。両方の設定がある場合は内蔵パネルのみの設定を優先します。
 - Alder Lake-N / Twin LakeとAlder Lake-H/P/U / Raptor Lake-H/Pではタイル形式を自動選択します。`-yTileDisable`は使わないでください。`AAPL,GfxYTile`は不要です。
 
 ## 動作確認済みの機能と既知の問題
@@ -110,6 +111,7 @@ MIPI DSIは**GPD MicroPC 2とCHUWI MiniBook X N100のみで検証した試験的
 - 一部の画像変換でアプリがクラッシュし、SequoiaのApp Store動画ではGPUが停止することがあります。
 - Safari動画で時折コマ落ちします。FairPlay保護コンテンツは未対応です。
 - 同時表示は最大3画面です。検証構成を超える解像度とシステム全体のスリープ／復帰は未検証です。
+- ファームウェアが起動時に複数画面を表示するeDP構成では、内蔵パネルを主起動画面として維持する必要があります。このeDP構成は実機検証待ちです。
 - 一部の端子配線・輝度制御方式、MST、Thunderbolt管理の出力は未対応です。
 
 ### ロードマップ

@@ -87,6 +87,7 @@ These settings are unnecessary at 96MB and do not increase firmware-allocated me
 - GPU selection is automatic; a `device-id` override is normally unnecessary.
 - Firmware-selected internal panels can use a verified EDID for [panel identity selection](docs/device-selection.md#firmware-selected-internal-panel).
 - On Alder Lake-N / Twin Lake and Alder Lake-H/P/U / Raptor Lake-H/P, `-wex-edp-panel-only` restricts a qualified eDP board to its internal panel and disables all external display outputs.
+- On the same GPUs, `-wex-edp-hdmi-only` retains a qualified eDP panel and fixed Combo HDMI outputs while disabling DisplayPort and Type-C display routes. It requires valid firmware routing for both outputs. The internal-panel-only setting takes precedence if both are present.
 - Alder Lake-N / Twin Lake and Alder Lake-H/P/U / Raptor Lake-H/P select tiling automatically. Do not use `-yTileDisable`; `AAPL,GfxYTile` is unnecessary.
 
 ## Tested features and known issues
@@ -110,6 +111,7 @@ MIPI DSI support is **experimental and tested only on GPD MicroPC 2 and CHUWI Mi
 - Some image-conversion operations can crash applications; App Store video can freeze the GPU on Sequoia.
 - Safari video may occasionally drop frames. FairPlay-protected playback is unsupported.
 - Up to three displays are supported. Resolutions beyond the tested configurations and full system sleep/wake remain unverified.
+- With multiple firmware boot displays, eDP startup currently requires the internal panel to remain the primary boot display. Hardware validation of this eDP configuration is pending.
 - Some connector layouts and backlight methods, MST and Thunderbolt-managed outputs are unsupported.
 
 ### Roadmap

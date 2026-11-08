@@ -1,5 +1,6 @@
 {
   "-wex-edp-panel-only": [],
+  "-wex-edp-hdmi-only": [],
   "-wex-dsi-audit": [],
   "-wex-dsi-adopt": [],
   "-wex-dsi-panel-only": [],
@@ -148,5 +149,7 @@
   "-wex-adlp-load-only": [],
   "-wex-display13-offline": [],
   "-wex-dsi-hdmi-test": [],
-  "-wex-dsi-power-test": []
+  "-wex-dsi-power-test": [],
+  "-wex-video-progressive-fix": [],
+  "-wex-video-vcs-diagnostic": []
 }
