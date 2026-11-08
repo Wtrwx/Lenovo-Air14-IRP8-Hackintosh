@@ -24,12 +24,26 @@ WhateverXe 应在 Lilu 之后加载，不能同时启用 WhateverGreen。图形�
 - 对本机 DSDT 中 TPD0 `_CRS` 的精确重命名。限定 DSDT 长度、OEM Table ID、完整方法字节及一次匹配。
 - 本机固定 DVMT 设置对应的 framebuffer 属性与 I2C polling 属性。
 - 本机使用的相关启动参数。
+- 当前显示恢复候选使用的 `UEFI → Output → ReconnectGraphicsOnConnect = true`，连续重启和电源键仍待验证。
 
 需逐项合并到已有 OpenCore 配置，保留其其他必要项。片段中的 `boot-args` 也需要合并，不能直接覆盖已有参数。对不同固件必须重新检查 ACPI 路径和匹配条件，不能把重命名改成全局 `_CRS` 替换。
 
 当前 HDMI 路径使用 `-wex-edp-hdmi-only`，根据连接器和显示器能力协商 HDMI 2.0。使用这条路径时移除 `-wex-edp-panel-only`；后者保留为内屏恢复策略，会优先禁用外屏。已实测内屏 120Hz 与外屏 1440p 144Hz 同时工作、外屏颜色正常，并通过一次重启自动出图；外屏经 BetterDisplay 已实测 1920 × 1080 HiDPI 144Hz，长期稳定性仍需验证，详见[已知问题](known-issues.md)。`-igfxdvmt` 与片段里的 framebuffer 内存属性针对本机固定预分配情况，不是适用于所有机器的通用内存扩容设置。
 
 本机 VBT 使用固件选择的面板标识，需要额外提供 `xelp-panel-edid`：在 iGPU 上添加从**自己面板**取得并校验的 **128 字节 EDID base block**，类型为 Data。出于隐私和硬件匹配要求，仓库未附带该属性值。具体准入规则见 [panel identity selection](../sources/WhateverXe/docs/device-selection.md#firmware-selected-internal-panel)。
+
+## 原生热键
+
+使用 VoodooPS2Controller 的键盘插件处理 ACPI 通知，无需 Air14 Hotkeys App。编译并安装自定义 SSDT：
+
+```sh
+mkdir -p build/acpi
+iasl -p build/acpi/SSDT-BKEY ACPI/SSDT-BKEY.dsl
+```
+
+将 AML 放入已有 EFI 的 `OC/ACPI`，逐项合并 [`config/Air14-hotkeys-fragment.plist`](../config/Air14-hotkeys-fragment.plist) 的一条 Add 和两条 Patch。片段限定本机 DSDT 长度、OEM Table ID，并各重命名一次 `_Q8E` / `_Q8F`；其他固件必须先检查路径和唯一匹配，不可移除这些限制后全局替换。
+
+Darwin 下亮度事件通过 PS2K 转发；其他系统调用原 EC 方法。RMCF 同时注入 Insert → Help/Insert、Print Screen → F13，不需要发布或替换第三方驱动二进制。安装前备份 EFI；下次启动加载，撤销时恢复备份并移除新增 SSDT 与对应配置项。亮度方向已按用户反馈交换，仍待重新启动验证；功能覆盖与限制见 [最新状态](status-2026-11-09.md)。
 
 ## 外屏 HiDPI
 

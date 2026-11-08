@@ -38,16 +38,16 @@
     "defaultAudioOutputDuringInspection": "Built-in Output"
   },
   "hotkeys": {
-    "helperVersion": "1.2.0",
-    "backgroundLaunchObserved": true,
-    "accessibilityAndAutoEnableObserved": true,
-    "volumeAndBrightnessSuccessObserved": true,
-    "historicalCallbackChecksPassed": 87,
-    "callbackChecksCoverCorrectFnLockSemantics": false,
-    "fnLockFixImplemented": false,
-    "uiRedesignImplemented": false,
-    "reloginValidated": false,
-    "firmwareBridgeLoadedInPriorCheck": false
+    "historicalHelperVersion": "1.2.0",
+    "historicalBackgroundLaunchObserved": true,
+    "historicalAccessibilityAndAutoEnableObserved": true,
+    "historicalVolumeAndBrightnessSuccessObserved": true,
+    "helperRemovedOn": "2026-11-09",
+    "helperCurrentlyInstalled": false,
+    "helperSourceRetained": false,
+    "nativeHotkeysStatus": "status-2026-11-09.md",
+    "fullNativeKeyboardValidated": false,
+    "historicalLocalCandidateVersion": "1.3.0"
   },
   "scope": "Status documentation only; no system binaries, EFI, personal identifiers or raw logs"
 }

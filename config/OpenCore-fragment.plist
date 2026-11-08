@@ -104,5 +104,13 @@
 			</dict>
 		</dict>
 	</dict>
+	<key>UEFI</key>
+	<dict>
+		<key>Output</key>
+		<dict>
+			<key>ReconnectGraphicsOnConnect</key>
+			<true/>
+		</dict>
+	</dict>
 </dict>
 </plist>

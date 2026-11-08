@@ -34,19 +34,19 @@
 | USB-C DP Alt Mode 视频输出 | 未解决；与普通 USB、Thunderbolt 分别验证 |
 | 声卡 / 麦克风 | 未解决；内置 SST 数字麦克风需要单独适配 |
 | 蓝牙 | 已启用 IntelBluetoothFirmware / IntelBTPatcher 2.5.3；可接收设备广播，仍有服务崩溃及耳机偶发无声 |
-| 电源键 / Fn | 电源键待修复；热键后台助手已运行，音量 / 亮度操作成功，FnLock 逻辑及其余组合键待修复验证 |
+| 电源键 / Fn | 电源键 / 重启仍待验证；热键改用 EFI，亮度方向修正待下次启动验证；已移除 Hotkeys App |
 | CPU 温度 | Raptor Lake-P DTS 插件已验证有效读数、负载变化及再次重启后的读取；P/E 核逐核覆盖未完整验证 |
 | 风扇转速 | 尚未找到并验证本机 RPM 接口 |
 | Thunderbolt | 普通 USB 扩展坞设备可枚举；NHI、热插拔和雷电设备未验证 |
 | Apple 账户 | 登录后退出及 App Store 登录失败尚未解决 |
 
-详细限制见 [已知问题](docs/known-issues.md)。蓝牙与热键的最新进展、故障证据及验证边界见 [2026-11-07 状态更新](docs/status-2026-11-07.md)。
+原生热键及最新重启修复范围见 [2026-11-09 更新](docs/status-2026-11-09.md)。详细限制见 [已知问题](docs/known-issues.md)。蓝牙与热键的最新进展、故障证据及验证边界见 [2026-11-07 状态更新](docs/status-2026-11-07.md)。
 
 ## 仓库内容
 
 - [sources/WhateverXe](sources/WhateverXe)：包含本机适配修改的显卡插件、Compat 源码及原有 CPU 测试。
 - [sources/SMCProcessor](sources/SMCProcessor)：保留 VirtualSMC 的 Raptor Lake-P 温度插件源码、构建方式和能力边界。
-- [ACPI](ACPI)：背光及触控板的自定义 SSDT 源码。
+- [ACPI](ACPI)：背光、触控板及原生亮度键的自定义 SSDT 源码。
 - [config](config)：OpenCore 配置片段与 I2C 匹配注入器的 Info.plist。
 - [tools/fix_panel_edid.py](tools/fix_panel_edid.py)：为已核对的同型号面板修正 DisplayID 校验，生成本地显示覆盖候选文件。
 - [tools/make_hidpi_override.py](tools/make_hidpi_override.py)：按实际显示器 ID 生成 HiDPI 缩放候选文件，保留显示器原始 EDID 和时序；不保证所有刷新率与缩放组合可用。
