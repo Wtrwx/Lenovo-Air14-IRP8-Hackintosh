@@ -155,15 +155,26 @@ int main(){
   }
   pendingBackingFB=nullptr;
  }
+ // Retained pipe slots can outlive their native path during hotplug. Reject
+ // before any MMIO/allocation or global fault change, for every pipe.
+ for(unsigned p=0;p<3;++p)for(bool optimized:{false,true})for(bool missing:{false,true}) {
+  Map map;setup(map);auto &c=display13FBPower;
+  if(missing)put(fb[p],0x4A08,(OSObject*)nullptr);else badBinding=true;
+  const auto before=c.dbuf;const auto regs=map.r;const auto reads=map.reads;
+  const auto pending=c.pipe[p].wmPending;
+  XE::adlnSetupDBUFPipe(c.controller,(IOService*)fb[p],p,optimized);
+  assert(!memcmp(&before,&c.dbuf,sizeof(before)) && map.r==regs && map.reads==reads);
+  assert(!armCalls && !c.watermarkFaulted && c.pipe[p].wmPending==pending);
+  assert(!ownerDepth && !fbDepth && records.empty());
+ }
  // Generic unavailable results, mismatches, timeouts and allocation failures
  // must not be turned into deferred success by the new branch.
- for(unsigned fault=0;fault<6;++fault){
+ for(unsigned fault=0;fault<5;++fault){
   Map map;setup(map);auto &c=display13FBPower;
   if(fault==1){nextLatch.status=S::Conflict;nextLatch.check=C::AwaitingScanout;}
   if(fault==2){nextLatch.status=S::CommitTimeout;nextLatch.check=C::Frame;}
   if(fault==3)failPrimary=true;
   if(fault==4)failWM=true;
-  if(fault==5)badBinding=true;
   XE::adlnSetupDBUFPipe(c.controller,(IOService*)fb[0],0,false);assert(c.dbuf.faulted);
  }
  assert(!ownerDepth&&!fbDepth);puts("production DBUF setup: deferred retirement and failure guards passed");

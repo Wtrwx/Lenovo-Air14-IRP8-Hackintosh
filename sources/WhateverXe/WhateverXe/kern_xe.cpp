@@ -10552,6 +10552,14 @@ void XE::adlnSetupDBUFPipe(IOService *controller,IOService *fb,unsigned pipe,boo
 	const auto binding=adlnInspectPathBinding(fb,path,callbackXE->adlnPlatform,callbackXE->adlnOutputWiring);
 	const bool associated=Display13FBMemory::boundPipe(c.pipe,fb)==pipe &&
 		binding.status==TGLFBBinding::Status::Complete && binding.pipe==pipe;
+    // A retained framebuffer slot can survive native path removal. It owns
+    // no allocation transaction until its live path is qualified again.
+    if(!associated) {
+        uint64_t rejected[] {1,pipe,static_cast<uint32_t>(binding.status),binding.pipe,binding.ddi};
+        IOLockUnlock(c.lock);IORecursiveLockUnlock(mutex);
+        adlnPublishMemory("N97FBDBUFRejectedBinding",pipe,rejected,sizeof(rejected));
+        return;
+    }
 	// A cold DDB demand may precede engine resume. Restore its clock/power
 	// only after validating the current native path association.
 	if(associated && c.bridge.bootAdopted && c.bridge.begun && !c.bridge.state.suspended &&
