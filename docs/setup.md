@@ -91,3 +91,9 @@ python3 tools/fix_panel_edid.py \
 **系统显示覆盖中的 256 字节 EDID 与 EFI 的 `xelp-panel-edid` 不是同一个用途。** 后者保持物理面板的 128 字节 base block，不能用完整显示覆盖内容替换。
 
 本机已验证 1440 × 900 HiDPI 与约 120.0002Hz 的实际输出。120Hz 可用不表示 GPU 挂起或动画卡顿已修复。
+
+### 内屏名称
+
+该面板 EDID 没有标准的显示名称描述符，系统可能将其显示为 `Unknown Display`。可在已有内屏覆盖 plist 中添加 `DisplayProductName` 字典，例如 `en_US` 为 `Lenovo Air14 Built-in Display`、`zh_CN` 为 `Lenovo Air14 内置显示器`，并保留原有 `DisplayVendorID`、`DisplayProductID`、`IODisplayEDID` 及缩放配置。该名称只是显示元数据，无需改写面板 EDID 或 HDMI 驱动。
+
+本机已安装名称配置并逐项核对原有 EDID 未变，120Hz 及两屏 HiDPI 仍工作；当前会话仍缓存旧名称，重启后显示名称是否更新尚待验证。
