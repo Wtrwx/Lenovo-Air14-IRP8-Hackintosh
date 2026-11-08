@@ -9959,6 +9959,17 @@ void XE::wrapDisplay13WMArmUpdate(IOService *fb) {
     display13WMArmUpdate(fb);
 }
 
+// Called with the framebuffer mutex and resource owner lock held. A cached
+// pipe slot alone is not authority to commit a watermark transaction.
+bool XE::adlnWMUpdateAssociated(IOService *fb,unsigned pipe,OSObject *path) {
+ auto &c=display13FBPower;
+ if(!fb || pipe>=3 || Display13FBMemory::boundPipe(c.pipe,fb)!=pipe)return false;
+ const auto binding=adlnInspectPathBinding(fb,path,callbackXE->adlnPlatform,callbackXE->adlnOutputWiring);
+ return binding.status==TGLFBBinding::Status::Complete && binding.pipe==pipe &&
+  display13FBAssociations(c.controller,0x1C20,fb,fb->getMetaClass()->getClassSize(),display13FBExpectedOwner(c.controller)) &&
+  !Display13FBMemory::field<uint8_t>(fb,0x4A48) && adlnWriterMappingBound();
+}
+
 void XE::display13WMArmUpdate(IOService *fb) {
 	auto &c=display13FBPower;bool owner=false;
 	const auto pipe=Display13FBMemory::boundPipe(c.pipe,fb);
@@ -9972,7 +9983,9 @@ void XE::display13WMArmUpdate(IOService *fb) {
 	if(mutex)IORecursiveLockLock(mutex);
 	if(c.lock && pipe<3) {
 		IOLockLock(c.lock);
-		owner=mutex &&
+        path=mutex ? Display13FBMemory::singlePath<OSObject *>(fb) : nullptr;
+        const bool associated=mutex && adlnWMUpdateAssociated(fb,pipe,path);
+		owner=associated &&
 			c.pipe[pipe].wmPending && !c.pipe[pipe].wmCommitting && !c.watermarkFaulted && !c.bridge.state.faulted &&
 			!c.memoryFaulted && !c.clockFaulted && c.engineEnabled && c.map && c.access && !c.dbuf.updating && !c.dbuf.faulted;
 		if(owner)c.pipe[pipe].wmCommitting=true;
@@ -9980,11 +9993,6 @@ void XE::display13WMArmUpdate(IOService *fb) {
 		// cursor-only commit must still verify the latest native primary intent.
 		if(mutex && c.engineEnabled && c.map && c.access && !c.memoryFaulted && !c.clockFaulted &&
 			!c.bridge.state.faulted && (owner || !c.pipe[pipe].wmCommitting)) {
-			path=Display13FBMemory::singlePath<OSObject *>(fb);
-			const auto binding=adlnInspectPathBinding(fb,path,callbackXE->adlnPlatform,callbackXE->adlnOutputWiring);
-			const bool associated=binding.status==TGLFBBinding::Status::Complete && binding.pipe==pipe &&
-				display13FBAssociations(c.controller,0x1C20,fb,fb->getMetaClass()->getClassSize(),display13FBExpectedOwner(c.controller)) &&
-				!Display13FBMemory::field<uint8_t>(fb,0x4A48) && adlnWriterMappingBound();
 			if(associated) {
 				packetCount=Display13FBMemory::field<uint32_t>(path,0x35F0);
 				// A direct native cursor swap may already have superseded the last

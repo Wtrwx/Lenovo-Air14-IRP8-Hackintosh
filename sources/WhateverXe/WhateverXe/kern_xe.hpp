@@ -430,6 +430,7 @@ private:
 	static void wrapDisplay13CursorWMEnable(OSObject *plane,bool arm);
 	static void wrapDisplay13WMArmUpdate(IOService *framebuffer);
     static void display13WMArmUpdate(IOService *framebuffer);
+    static bool adlnWMUpdateAssociated(IOService *framebuffer,unsigned pipe,OSObject *path);
 	static Display13WM::Latch adlnVerifyWMLatch(IOService *framebuffer,uint64_t nativeHz,uint64_t targetHz);
 	mach_vm_address_t orgDisplay13WMArmUpdate {};
 	static void wrapAlderLakeNPrimaryDBUF(OSObject *plane,uint32_t start,uint32_t end,bool wait);
