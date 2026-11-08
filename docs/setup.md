@@ -27,7 +27,7 @@ WhateverXe 应在 Lilu 之后加载，不能同时启用 WhateverGreen。图形�
 
 需逐项合并到已有 OpenCore 配置，保留其其他必要项。片段中的 `boot-args` 也需要合并，不能直接覆盖已有参数。对不同固件必须重新检查 ACPI 路径和匹配条件，不能把重命名改成全局 `_CRS` 替换。
 
-当前 HDMI 路径使用 `-wex-edp-hdmi-only`，根据连接器和显示器能力协商 HDMI 2.0。使用这条路径时移除 `-wex-edp-panel-only`；后者保留为内屏恢复策略，会优先禁用外屏。已实测内屏 120Hz 与外屏 1440p 144Hz 同时工作、外屏颜色正常；开机后仍可能需要重插 HDMI，详见[已知问题](known-issues.md)。`-igfxdvmt` 与片段里的 framebuffer 内存属性针对本机固定预分配情况，不是适用于所有机器的通用内存扩容设置。
+当前 HDMI 路径使用 `-wex-edp-hdmi-only`，根据连接器和显示器能力协商 HDMI 2.0。使用这条路径时移除 `-wex-edp-panel-only`；后者保留为内屏恢复策略，会优先禁用外屏。已实测内屏 120Hz 与外屏 1440p 144Hz 同时工作、外屏颜色正常，并通过一次重启自动出图；长期稳定性和 HiDPI 仍需验证，详见[已知问题](known-issues.md)。`-igfxdvmt` 与片段里的 framebuffer 内存属性针对本机固定预分配情况，不是适用于所有机器的通用内存扩容设置。
 
 本机 VBT 使用固件选择的面板标识，需要额外提供 `xelp-panel-edid`：在 iGPU 上添加从**自己面板**取得并校验的 **128 字节 EDID base block**，类型为 Data。出于隐私和硬件匹配要求，仓库未附带该属性值。具体准入规则见 [panel identity selection](../sources/WhateverXe/docs/device-selection.md#firmware-selected-internal-panel)。
 
