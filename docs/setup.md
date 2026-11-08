@@ -31,6 +31,16 @@ WhateverXe 应在 Lilu 之后加载，不能同时启用 WhateverGreen。图形�
 
 本机 VBT 使用固件选择的面板标识，需要额外提供 `xelp-panel-edid`：在 iGPU 上添加从**自己面板**取得并校验的 **128 字节 EDID base block**，类型为 Data。出于隐私和硬件匹配要求，仓库未附带该属性值。具体准入规则见 [panel identity selection](../sources/WhateverXe/docs/device-selection.md#firmware-selected-internal-panel)。
 
+## 外屏 HiDPI
+
+`tools/make_hidpi_override.py` 根据自己的显示器 vendor/product ID 生成仅含 `scale-resolutions` 的候选文件。它不覆盖 EDID，不固定 HDMI 刷新率，也不自动安装文件。例如：
+
+```sh
+python3 tools/make_hidpi_override.py --vendor 0x1234 --product 0x5678 --logical 1920x1080 --output DisplayProductID-5678
+```
+
+示例 ID 必须替换为自己显示器的实际值。相当于 1920 × 1080 的 HiDPI 会使用 3840 × 2160 渲染缓冲区，需要另行验证显存、性能及目标刷新率。安装位置为 `/Library/Displays/Contents/Resources/Overrides/DisplayVendorID-<十六进制 vendor>/DisplayProductID-<十六进制 product>`；先备份已有覆盖文件，再重新连接显示器或重启，使模式重新枚举。删除新增文件并重新连接即可撤销。外屏原生 1440p 144Hz 的验证不等于 HiDPI 144Hz 已验证。
+
 ## 背光
 
 使用 ACPICA 的 `iasl` 编译自定义 SSDT：

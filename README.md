@@ -49,6 +49,7 @@
 - [ACPI](ACPI)：背光及触控板的自定义 SSDT 源码。
 - [config](config)：OpenCore 配置片段与 I2C 匹配注入器的 Info.plist。
 - [tools/fix_panel_edid.py](tools/fix_panel_edid.py)：为已核对的同型号面板修正 DisplayID 校验，生成本地显示覆盖候选文件。
+- [tools/make_hidpi_override.py](tools/make_hidpi_override.py)：按实际显示器 ID 生成 HiDPI 缩放候选文件，保留显示器原始 EDID 和时序；不保证所有刷新率与缩放组合可用。
 - [构建与配置说明](docs/setup.md)、[来源与修改范围](docs/provenance.md)。
 
 完整 EFI、SMBIOS 身份、原始 EDID/ACPI 转储、账户数据和诊断日志没有包含在仓库中。Apple 显卡驱动载荷需按上游 [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphics) 的说明单独获取。
