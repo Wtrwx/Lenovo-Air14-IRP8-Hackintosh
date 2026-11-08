@@ -27,7 +27,7 @@ WhateverXe 应在 Lilu 之后加载，不能同时启用 WhateverGreen。图形�
 
 需逐项合并到已有 OpenCore 配置，保留其其他必要项。片段中的 `boot-args` 也需要合并，不能直接覆盖已有参数。对不同固件必须重新检查 ACPI 路径和匹配条件，不能把重命名改成全局 `_CRS` 替换。
 
-当前 HDMI 路径使用 `-wex-edp-hdmi-only`，根据连接器和显示器能力协商 HDMI 2.0。使用这条路径时移除 `-wex-edp-panel-only`；后者保留为内屏恢复策略，会优先禁用外屏。已实测内屏 120Hz 与外屏 1440p 144Hz 同时工作、外屏颜色正常，并通过一次重启自动出图；长期稳定性和 HiDPI 仍需验证，详见[已知问题](known-issues.md)。`-igfxdvmt` 与片段里的 framebuffer 内存属性针对本机固定预分配情况，不是适用于所有机器的通用内存扩容设置。
+当前 HDMI 路径使用 `-wex-edp-hdmi-only`，根据连接器和显示器能力协商 HDMI 2.0。使用这条路径时移除 `-wex-edp-panel-only`；后者保留为内屏恢复策略，会优先禁用外屏。已实测内屏 120Hz 与外屏 1440p 144Hz 同时工作、外屏颜色正常，并通过一次重启自动出图；外屏经 BetterDisplay 已实测 1920 × 1080 HiDPI 144Hz，长期稳定性仍需验证，详见[已知问题](known-issues.md)。`-igfxdvmt` 与片段里的 framebuffer 内存属性针对本机固定预分配情况，不是适用于所有机器的通用内存扩容设置。
 
 本机 VBT 使用固件选择的面板标识，需要额外提供 `xelp-panel-edid`：在 iGPU 上添加从**自己面板**取得并校验的 **128 字节 EDID base block**，类型为 Data。出于隐私和硬件匹配要求，仓库未附带该属性值。具体准入规则见 [panel identity selection](../sources/WhateverXe/docs/device-selection.md#firmware-selected-internal-panel)。
 
@@ -39,7 +39,18 @@ WhateverXe 应在 Lilu 之后加载，不能同时启用 WhateverGreen。图形�
 python3 tools/make_hidpi_override.py --vendor 0x1234 --product 0x5678 --logical 1920x1080 --output DisplayProductID-5678
 ```
 
-示例 ID 必须替换为自己显示器的实际值。相当于 1920 × 1080 的 HiDPI 会使用 3840 × 2160 渲染缓冲区，需要另行验证显存、性能及目标刷新率。安装位置为 `/Library/Displays/Contents/Resources/Overrides/DisplayVendorID-<十六进制 vendor>/DisplayProductID-<十六进制 product>`；先备份已有覆盖文件，再重新连接显示器或重启，使模式重新枚举。删除新增文件并重新连接即可撤销。外屏原生 1440p 144Hz 的验证不等于 HiDPI 144Hz 已验证。
+示例 ID 必须替换为自己显示器的实际值。相当于 1920 × 1080 的 HiDPI 会使用 3840 × 2160 渲染缓冲区，需要另行验证显存、性能及目标刷新率。安装位置为 `/Library/Displays/Contents/Resources/Overrides/DisplayVendorID-<十六进制 vendor>/DisplayProductID-<十六进制 product>`；先备份已有覆盖文件，再重新连接显示器或重启，使模式重新枚举。删除新增文件并重新连接即可撤销。仅安装此生成器的覆盖文件未能在本机直接启用外屏 HiDPI。
+
+2026-11-08 使用 [BetterDisplay 5.2.1](https://github.com/waydabber/BetterDisplay) 的 Pro 试用完成外屏系统缩放配置后，在其模式列表中选择 **1920 × 1080 HiDPI、144Hz、8bpc**。实际读回为逻辑 1920 × 1080、渲染缓冲区 3840 × 2160、144Hz；内屏同时保持逻辑 1440 × 900、渲染 2880 × 1800、120Hz。用户确认外屏文字清晰、大小合适、颜色正常。
+
+系统设置的简化列表可能不显示该额外模式；可先按 [Apple 说明](https://support.apple.com/guide/mac-help/change-your-displays-resolution-mchl86d72b76/mac) 开启“显示所有分辨率”，仍未列出时从 BetterDisplay 选择。应用 CLI 可按显示器名称查询及切换，避免保存会随重新枚举变化的模式序号：
+
+```sh
+/Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay get --name="DISPLAY_NAME" --displayModeList
+/Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay set --name="DISPLAY_NAME" --resolution=1920x1080 --hiDPI=on --refreshRate=144
+```
+
+将 `DISPLAY_NAME` 替换为实际显示器名称，先确认对应 HiDPI 模式及刷新率出现在列表中，其他显示器按自身能力选择。此结果依赖 BetterDisplay 配置，试用验证不等于永久获得 Pro 许可；尚未验证该 HiDPI 组合重启、睡眠唤醒后的自动保持。
 
 ## 背光
 
