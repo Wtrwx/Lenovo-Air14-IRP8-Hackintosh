@@ -260,6 +260,18 @@ int main() {
      if(kind==2) {io.rejectRegister=PipeIIR(1)+4;
       assert(extendActivePipes(io,state,3)==Status::Readback && state.faulted && !(io.r[Master]&Enable));}
     }
+    // Rejection evidence identifies the exact stopped-consumer guard without
+    // changing the proof or writing registers on a failed preflight.
+    for(unsigned kind=0;kind<11;++kind) {
+     IO io;State state;io.r[0x71008]=0xC0000000;assert(enable(io,state,0,NativeGT,3)==Status::Complete);
+     io.r[0x71008]=0;
+     const uint32_t reg=kind==0?0x71008:kind==1?0x71080:kind==2?0x61400:
+         kind<8?0x71180+0x100*(kind-3):DSBControl(1,kind-8);
+     const uint32_t value=kind==1?1:Enable;io.r[reg]=value;io.writes.clear();PowerReleaseScope g;
+     assert(beginPowerRelease(io,state,g,32,2,0,0,0,0,0)==Status::Topology);
+     assert(g.stop.reg==reg && g.stop.value==value && g.stop.pipe==1);
+     assert(!g.held && !state.faulted && io.writes.empty());
+    }
     {IO io;State state;io.r[0x71008]=0xC0000000;assert(enable(io,state,0,NativeGT,3)==Status::Complete);
      io.r[0x71008]=0;io.r[Master]|=1U<<16;io.r[GfxMaster]=Enable|4;io.r[PipeIIR(0)]=8;
      const auto peerIER=io.r[PipeIIR(0)+4],peerIMR=io.r[PipeIIR(0)-4];io.writes.clear();

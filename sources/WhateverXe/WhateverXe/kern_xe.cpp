@@ -10792,7 +10792,7 @@ bool XE::adlnPowerReference(void *power,uint32_t operation,uint32_t domain) {
 	}
 	uint64_t record[32] {},check[25] {3,operation,domain},auxRecord[10] {},context[24] {},gateEvidence[8] {}; Display13Power::Result result;
 	IOWorkLoop *acquiredGate=nullptr;
-	Display13FBIRQ::PowerReleaseScope releaseScope;uint64_t irqRelease[12] {};
+	Display13FBIRQ::PowerReleaseScope releaseScope;uint64_t irqRelease[15] {};
 	bool previousQuiescing=false;uint32_t previousBlocked=0;
 	bool disableEngine=false;
 	IOLockLock(c.lock);
@@ -10876,12 +10876,13 @@ bool XE::adlnPowerReference(void *power,uint32_t operation,uint32_t domain) {
 				const auto aux=__atomic_load_n(reinterpret_cast<uint32_t *>(reinterpret_cast<uint8_t *>(c.controller)+0xE0C),__ATOMIC_ACQUIRE);
 				const auto hpd=__atomic_load_n(reinterpret_cast<uint32_t *>(reinterpret_cast<uint8_t *>(c.controller)+0xE10),__ATOMIC_ACQUIRE);
 				previousQuiescing=irq.quiescing;previousBlocked=irq.blockedPipes;
-				irqRelease[0]=1;irqRelease[1]=released;irqRelease[2]=affected;irqRelease[3]=irq.handlers;
+				irqRelease[0]=2;irqRelease[1]=released;irqRelease[2]=affected;irqRelease[3]=irq.handlers;
 				irqRelease[4]=irq.scopes.display;irqRelease[5]=irq.softwareHandlers;
 				irqRelease[6]=queued;irqRelease[7]=aux;irqRelease[8]=hpd;
 				const auto status=!irq.quiescing && irq.scopes.total==irq.handlers ?
 					Display13FBIRQ::beginPowerRelease(irqIO,irq.state,releaseScope,released,affected,
 						irq.scopes.display,irq.softwareHandlers,queued,aux,hpd) : Display13FBIRQ::Status::Unavailable;
+				irqRelease[12]=releaseScope.stop.reg;irqRelease[13]=releaseScope.stop.value;irqRelease[14]=releaseScope.stop.pipe;
 				irqRelease[9]=static_cast<uint32_t>(status);releaseAllowed=status==Display13FBIRQ::Status::Complete;
 				if(releaseScope.held) {irq.quiescing=true;irq.blockedPipes=affected;}
 			} else {

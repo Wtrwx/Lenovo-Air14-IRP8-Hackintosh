@@ -329,27 +329,34 @@ inline uint32_t portPowerDomains() {
 }
 // PLL bypass transitions retain pending interrupt status. Unlike physical
 // well release, they only need stopped consumers while the master is masked.
-template<class IO> bool consumersStopped(IO &io,uint32_t pipes,const Display13Transcoder::Bindings &transcoders={}) {
-    if(!transcoders.valid())return false;
+struct StopEvidence {uint32_t reg {},value {},pipe {UINT32_MAX};};
+inline bool rejectStop(StopEvidence *e,uint32_t reg,uint32_t value,uint32_t pipe=UINT32_MAX) {
+    if(e)*e={reg,value,pipe};
+    return false;
+}
+template<class IO> bool consumersStopped(IO &io,uint32_t pipes,const Display13Transcoder::Bindings &transcoders={},StopEvidence *e=nullptr) {
+    if(e)*e={};
+    if(!transcoders.valid())return rejectStop(e,0,1);
     const auto wells=io.read(Driver);
-    if(wells==UINT32_MAX || (wells&3)!=3 || (wells&(3U<<16)))return false;
-    if(transcoders.dsi0Pipe<3 && (pipes&(1U<<transcoders.dsi0Pipe)) && !powered(wells,transcoders.dsi0Pipe))return false;
+    if(wells==UINT32_MAX || (wells&3)!=3 || (wells&(3U<<16)))return rejectStop(e,Driver,wells);
+    if(transcoders.dsi0Pipe<3 && (pipes&(1U<<transcoders.dsi0Pipe)) && !powered(wells,transcoders.dsi0Pipe))return rejectStop(e,Driver,wells,transcoders.dsi0Pipe);
     for(unsigned p=0;p<3;++p)if((pipes&(1U<<p)) && powered(wells,p)) {
         const auto conf=Display13Transcoder::control(io,p,transcoders),cursor=io.read(0x70080+0x1000*p);
         const auto trans=io.read(transcoders.function(p));
-        if(conf==UINT32_MAX || cursor==UINT32_MAX || trans==UINT32_MAX ||
-           (conf&0xC0000000) || (cursor&63) || (trans&Enable))return false;
+        if(conf==UINT32_MAX || (conf&0xC0000000))return rejectStop(e,transcoders.control(p),conf,p);
+        if(cursor==UINT32_MAX || (cursor&63))return rejectStop(e,0x70080+0x1000*p,cursor,p);
+        if(trans==UINT32_MAX || (trans&Enable))return rejectStop(e,transcoders.function(p),trans,p);
         if(transcoders.dsi(p)) {
             const auto normal=io.read(0x60400+0x1000*p);
-            if(normal==UINT32_MAX || (normal&Enable))return false;
+            if(normal==UINT32_MAX || (normal&Enable))return rejectStop(e,0x60400+0x1000*p,normal,p);
         }
         for(unsigned n=0;n<5;++n) {
-            const auto plane=io.read(0x70180+0x1000*p+0x100*n);
-            if(plane==UINT32_MAX || (plane&Enable))return false;
+            const auto reg=0x70180+0x1000*p+0x100*n,plane=io.read(reg);
+            if(plane==UINT32_MAX || (plane&Enable))return rejectStop(e,reg,plane,p);
         }
         for(unsigned d=0;d<3;++d) {
-            const auto ctrl=io.read(DSBControl(p,d));
-            if(ctrl==UINT32_MAX || (ctrl&(Enable|1)))return false;
+            const auto reg=DSBControl(p,d),ctrl=io.read(reg);
+            if(ctrl==UINT32_MAX || (ctrl&(Enable|1)))return rejectStop(e,reg,ctrl,p);
         }
     }
     return true;
@@ -472,6 +479,7 @@ template<class IO> bool quiescent(IO &io,const State &s,uint32_t domains,unsigne
 struct PowerReleaseScope {
     bool held {},enabled {};
     uint32_t master {},affected {},parked {};
+    StopEvidence stop;
 };
 template<class IO> Status beginPowerRelease(IO &io,State &s,PowerReleaseScope &g,uint32_t domains,uint32_t pipes,
                                            unsigned displayHandlers,unsigned softwareHandlers,
@@ -484,7 +492,7 @@ template<class IO> Status beginPowerRelease(IO &io,State &s,PowerReleaseScope &g
     if(displayHandlers || softwareHandlers || (queued&events) || auxiliary || (hotplug&hpd))return Status::Unavailable;
     const auto master=io.read(Master),wells=io.read(Driver);
     if(master==UINT32_MAX || wells==UINT32_MAX || bool(master&Enable)!=s.enabled)return Status::Readback;
-    if(!consumersStopped(io,pipes,s.transcoders))return Status::Topology;
+    if(!consumersStopped(io,pipes,s.transcoders,&g.stop))return Status::Topology;
     // Preflight every bank before parking any. A never-configured bank must
     // already have all notifications masked; it is not ours to clear.
     for(unsigned p=0;p<3;++p)if(pipes&(1U<<p)) {
