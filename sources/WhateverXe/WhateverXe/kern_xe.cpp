@@ -6096,8 +6096,16 @@ void XE::wrapDisplay13FBConfigureVBL(IOService *controller,IOService *fb,OSObjec
 	// getLock=false means hwSetInterruptForTransaction already holds the
 	// same native simple lock. Never recurse or overwrite its saved IRQ state.
 	const bool valid=display13FBAssociations(controller,0x1C20,fb,fb->getMetaClass()->getClassSize(),display13FBExpectedOwner(controller)) &&
-		path->getMetaClass()->getClassSize()>=0x3730;
+		path->getMetaClass()->getClassSize()>=0x3730 &&
+        Display13FBMemory::field<void *>(path,0x32B0)==fb;
 	const auto pipe=valid ? Display13FBMemory::field<uint32_t>(path,0x3640) : 3;
+    // Hot-unplug can retire a path before its queued VBL callback runs.
+    // No current owner means no authority to fault or mask all display IRQs.
+    // Keep the caller's existing IRQ lock ownership; never take a power lock.
+    if(!valid || pipe>=3) {
+        if(getLock)IOSimpleLockUnlockEnableInterrupt(c.lock,saved);
+        return;
+    }
 	if(Display13FBTopology::multiOutputWiring(callbackXE->adlnOutputWiring) && (c.quiescing || (pipe<3 && (c.blockedPipes&(1U<<pipe))))) {
 		c.status=Display13FBIRQ::Status::Power;adlnIRQCache(controller,io);
 		if(getLock)IOSimpleLockUnlockEnableInterrupt(c.lock,saved);return;
