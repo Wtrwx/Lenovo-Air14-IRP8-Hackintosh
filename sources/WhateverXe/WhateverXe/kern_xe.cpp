@@ -4876,6 +4876,21 @@ static void adlnFault(bool &flag,uint32_t line,uint32_t status=UINT32_MAX) {
         r[26]=display13FBIRQ.handlers;r[27]=display13FBIRQ.quiescing;r[28]=c.bridge.begun;r[29]=c.bridge.state.suspended;
         r[30]=c.bridge.pgRefs[0];r[31]=c.bridge.pgRefs[2];
         IORegistryEntry::getRegistryRoot()->setProperty("N97FBFirstResourceFault",r,sizeof(r));
+        // Preserve the initiating failure in the system log too. A userspace
+        // collector may be unavailable during early boot or display sleep.
+        // Log only bounded CPU state, once per boot; never addresses or MMIO.
+        const unsigned category=&flag==&c.memoryFaulted ? 1U : &flag==&c.clockFaulted ? 2U :
+            &flag==&c.dbuf.faulted ? 3U : &flag==&c.watermarkFaulted ? 4U :
+            &flag==&c.bridge.state.faulted ? 5U : 0U;
+        SYSLOG("display", "first-resource-fault v1 line=%u status=%u category=%u seq=%u engine=%u clockStopped=%u dbufSelected=%u consumers=%u unretired=%u updating=%u",
+            line,status,category,static_cast<unsigned>(c.sequence),unsigned(c.engineEnabled),unsigned(c.clockStopped),
+            c.dbuf.selected,c.dbuf.consumers,c.dbuf.unretired,c.dbuf.updating);
+        for(unsigned pipe=0;pipe<3;++pipe) {
+            const auto &p=c.pipe[pipe];
+            SYSLOG("display", "first-resource-pipe v1 pipe=%u bound=%u scanout=%u wmPending=%u wmProgramming=%u wmCommitting=%u destroying=%u",
+                pipe,unsigned(p.memoryFramebuffer!=nullptr),unsigned(p.publishedScanout!=0),p.wmPending,
+                unsigned(p.wmProgramming),unsigned(p.wmCommitting),unsigned(p.destroyingPath));
+        }
     }
     flag=true;
 }
@@ -8977,7 +8992,7 @@ bool XE::adlnFreeStoppedPipe(IOService *fb) {
     if(dsiPendingTarget(fb)){IORecursiveLockUnlock(mutex);return false;}
     IORecursiveLockLock(display13FBSysMem.retireLock);IOLockLock(c.lock);
     const auto pipe=Display13FBMemory::boundPipe(c.pipe,fb);
-    uint64_t record[24] {1,pipe};bool freed=false,held=false;uint32_t master=0,blocked=0;bool enabled=false;
+    uint64_t record[32] {2,pipe};bool freed=false,held=false;uint32_t master=0,blocked=0;bool enabled=false;
     auto controller=static_cast<IOService *>(c.controller);
     const auto slot=Display13FBMemory::field<uint8_t>(fb,0x4288);
     const auto count=controller ? Display13FBMemory::field<uint8_t>(controller,0xDF5) : 0;
@@ -8998,6 +9013,14 @@ bool XE::adlnFreeStoppedPipe(IOService *fb) {
         binding.status==TGLFBBinding::Status::Complete && binding.pipe==pipe &&
         Display13FBMemory::bitmapValid(count,used,mask) && adlnIRQOwner(controller) &&
         (slot==0xFF ? bool(surface) : Display13FBMemory::allocatedSlot(controller,fb)==slot);
+    // CPU-only entry evidence survives mutation by native release callbacks.
+    // Keep the original first 24 fields; append qualification and owner flags.
+    record[24]=ready;record[25]=static_cast<uint32_t>(binding.status);record[26]=binding.pipe;
+    record[27]=(c.memoryFaulted ? 1U : 0U)|(c.clockFaulted ? 2U : 0U)|(c.bridge.state.faulted ? 4U : 0U)|
+        (c.dbuf.faulted ? 8U : 0U)|(pipe<3 && (c.dbuf.updating&(1U<<pipe)) ? 16U : 0U)|
+        (pipe<3 && c.pipe[pipe].wmProgramming ? 32U : 0U)|(pipe<3 && c.pipe[pipe].wmCommitting ? 64U : 0U);
+    record[28]=noResource;record[29]=pinned;record[30]=logical!=0;
+    record[31]=pipe<3 && c.pipe[pipe].publishedScanout!=0;
     const bool handoff=ready && !surface && slot==0 && pool.state==1 && !pool.descriptor &&
         Display13FBMemory::same(pool,c.pipe[pipe].memory.pool) && c.pipe[pipe].memory.verifiedPages==pool.pages &&
         __atomic_load_n(&c.pipe[pipe].setupThread,__ATOMIC_ACQUIRE)==reinterpret_cast<uintptr_t>(current_thread()) &&
@@ -9068,7 +9091,12 @@ bool XE::adlnFreeStoppedPipe(IOService *fb) {
         if(!irq.state.faulted) {irq.state.enabled=enabled;io.write(Display13FBIRQ::Master,master&Display13FBIRQ::Enable);}
         adlnIRQCache(controller,io);IOSimpleLockUnlockEnableInterrupt(irq.lock,saved);
     }
-    if(!freed)adlnFault(c.memoryFaulted,__LINE__);
+    if(!freed) {
+        if(!c.firstFaultLine)SYSLOG("display", "stopped-memory-refused v2 pipe=%u entryReady=%u binding=%u bindingPipe=%u flags=%u noResource=%u pinned=%u logical=%u published=%u backing=%u parked=%u stopped=%u finalReady=%u slot=%u",
+            pipe,unsigned(record[24]),unsigned(record[25]),unsigned(record[26]),unsigned(record[27]),unsigned(record[28]),
+            unsigned(record[29]),unsigned(record[30]),unsigned(record[31]),unsigned(record[3]),unsigned(record[9]),unsigned(record[10]),unsigned(ready),unsigned(slot));
+        adlnFault(c.memoryFaulted,__LINE__);
+    }
     record[14]=ready;record[15]=freed;record[16]=slot;record[17]=used;record[18]=mask;
     record[19]=pool.state;record[20]=binding.ddi;record[21]=held;record[22]=c.dbuf.consumers;record[23]=c.dbuf.unretired;
     IOLockUnlock(c.lock);IORecursiveLockUnlock(display13FBSysMem.retireLock);IORecursiveLockUnlock(mutex);
