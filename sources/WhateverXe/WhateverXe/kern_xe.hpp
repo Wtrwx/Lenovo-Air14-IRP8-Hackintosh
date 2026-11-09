@@ -347,6 +347,9 @@ private:
 	mach_vm_address_t orgAlderLakeNClockSet {};
 	mach_vm_address_t orgAlderLakeNScanoutAllocate {}, orgAlderLakeNScanoutSetup {}, orgAlderLakeNAperture {};
 	mach_vm_address_t adlnScanoutDisableFB {};
+    mach_vm_address_t orgDisplay13ModeMemory {},display13ModeMemoryBase {};
+    size_t display13ModeMemoryBytes {};
+    static uint32_t wrapDisplay13ModeMemory(void *controller,void *framebuffer,const void *timing);
 	mach_vm_address_t orgAlderLakeNSetupWorkLoop {};
 	__attribute__((noinline)) bool processDisplay13FramebufferOutput(KernelPatcher &patcher,size_t index,mach_vm_address_t address,size_t size);
     bool display13FBTCHooksReady {};

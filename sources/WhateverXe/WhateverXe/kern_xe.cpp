@@ -5485,6 +5485,18 @@ bool XE::processDisplay13Framebuffer(KernelPatcher &patcher,size_t index,mach_vm
 	display13FBMemoryHooksReady=display13FBPower.lock && memoryKnown && patcher.routeMultiple(index,memoryRoutes,arrsize(memoryRoutes),address,size);
 	patcher.clearError();
 	IORegistryEntry::getRegistryRoot()->setProperty("N97FBMemoryHooksReady",display13FBMemoryHooksReady);
+    if(display13FBMemoryHooksReady && checkKernelArgument("-wex-wake-memory-observe")) {
+        const char *symbol="__ZN31AppleIntelFramebufferController9hwSetModeEP21AppleIntelFramebufferPK29IODetailedTimingInformationV2";
+        const auto entry=patcher.solveSymbol<mach_vm_address_t>(index,symbol,address,size);patcher.clearError();
+        const uint8_t bytes[]={0x55,0x48,0x89,0xE5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53,0x48,0x83,0xEC,0x28};
+        bool ready=entry==address+0x693EC && size>0x695C0 && !memcmp(reinterpret_cast<void *>(entry),bytes,sizeof(bytes));
+        if(ready) {
+            display13ModeMemoryBase=address;display13ModeMemoryBytes=size;
+            KernelPatcher::RouteRequest observe{symbol,wrapDisplay13ModeMemory,orgDisplay13ModeMemory};
+            ready=patcher.routeMultipleShort(index,&observe,1,address,size);patcher.clearError();
+        }
+        IORegistryEntry::getRegistryRoot()->setProperty("N97FBWakeMemoryObserveReady",ready);
+    }
 	const auto stopFB=patcher.solveSymbol<mach_vm_address_t>(index,"__ZN21AppleIntelFramebuffer14disableDisplayEb",address,size);
 	patcher.clearError();
 	const uint8_t stopEntry[] {0x55,0x48,0x89,0xE5,0x41,0x57,0x41,0x56,0x41,0x55,0x41,0x54,0x53};
@@ -8702,6 +8714,40 @@ void XE::wrapAlderLakeNSetupWorkLoop(IOService *controller,IOWorkLoop *workLoop)
 	if(result.status!=Display13Power::Status::Complete && adlnIRQOwner(controller))wrapDisplay13FBDisableIRQ(controller);
 	adlnPublishPowerRecord("N97FBBootHandoff",record);
 	IORegistryEntry::getRegistryRoot()->setProperty("N97FBBootHandoffCheck",check,sizeof(check));
+}
+
+// Observe native mode-entry inputs before a failed wake can block userspace.
+// The original call, arguments, result and admission policy remain unchanged.
+uint32_t XE::wrapDisplay13ModeMemory(void *controller,void *raw,const void *timing) {
+    auto fb=static_cast<IOService *>(raw),ctl=static_cast<IOService *>(controller);
+    auto s=callbackXE;static uint32_t sequence=0;
+    const auto id=__atomic_add_fetch(&sequence,1U,__ATOMIC_RELAXED);
+    const auto caller=reinterpret_cast<uintptr_t>(__builtin_return_address(0));
+    const auto site=caller>=s->display13ModeMemoryBase && caller-s->display13ModeMemoryBase<s->display13ModeMemoryBytes ?
+        caller-s->display13ModeMemoryBase : UINT32_MAX;
+    const bool qualified=ctl && fb && ctl==display13FBPower.controller && ctl->getMetaClass()->getClassSize()>=0x1C20 &&
+        fb->getMetaClass()->getClassSize()>=0x4B90 && Display13FBMemory::field<void *>(fb,0x1D0)==ctl;
+    auto record=[&](unsigned stage,uint32_t result) {
+        if(!qualified || (id>32 && !result))return;
+        const auto server=Display13FBMemory::field<uint32_t>(fb,0x420C);
+        const bool owner=Display13FBMemory::field<uintptr_t>(ctl,0xC0)!=0;
+        const bool disabled=Display13FBMemory::field<uint8_t>(ctl,0xE49)!=0;
+        const auto slot=Display13FBMemory::field<uint8_t>(fb,0x4288);
+        const bool surface=Display13FBMemory::field<uintptr_t>(fb,0x4348)!=0;
+        const auto transition=Display13FBMemory::setupTransition(disabled,owner,server,surface);
+        const auto index=Display13FBMemory::field<uint32_t>(fb,0x1DC);
+        uint64_t r[]={1,id,stage,site,index,server,owner,disabled,slot,surface,
+            Display13FBMemory::field<uintptr_t>(fb,0x4340)!=0,transition.aperture,transition.replace,result};
+        SYSLOG("display", "mode-memory v1 seq=%u stage=%u caller=%llx fb=%u server=%u owner=%u apertureDisabled=%u slot=%u surface=%u logical=%u aperture=%u replace=%u result=%x",
+            id,stage,static_cast<unsigned long long>(site),index,server,unsigned(owner),unsigned(disabled),unsigned(slot),
+            unsigned(surface),unsigned(r[10]),unsigned(transition.aperture),unsigned(transition.replace),result);
+        IORegistryEntry::getRegistryRoot()->setProperty("N97FBModeMemory",r,sizeof(r));
+        if(result && !IORegistryEntry::getRegistryRoot()->getProperty("N97FBFirstModeMemoryError"))
+            IORegistryEntry::getRegistryRoot()->setProperty("N97FBFirstModeMemoryError",r,sizeof(r));
+    };
+    record(0,0);
+    const auto result=FunctionCast(wrapDisplay13ModeMemory,s->orgDisplay13ModeMemory)(controller,raw,timing);
+    record(1,result);return result;
 }
 
 bool XE::wrapAlderLakeNScanoutAllocate(IOService *fb) {

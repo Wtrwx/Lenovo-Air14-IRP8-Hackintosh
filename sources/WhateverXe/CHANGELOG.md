@@ -6,6 +6,8 @@ Use the latest [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphi
 
 ### Added
 
+- Add opt-in CPU-only mode-entry memory observations, preserving native mode programming and error returns.
+
 - Record the initiating display-resource failure once in the system log, including bounded per-pipe CPU state and stopped-memory refusal details.
 
 - Add CPU-only failure details for guarded display-path association checks without changing teardown admission.
