@@ -45,6 +45,7 @@
 #include "kern_tgl_gmbus.hpp"
 #include "kern_alderlake_n_gpu.hpp"
 #include "kern_display13_fb_memory.hpp"
+#include "kern_display13_association_evidence.hpp"
 #include "kern_display13_fb_gtt.hpp"
 #include "kern_display13_fb_sysmem.hpp"
 #include "kern_display13_fb_topology.hpp"
@@ -9068,16 +9069,32 @@ uint32_t XE::releaseDisplay13Path(IOService *fb,OSObject *path) {
     auto mutex=Display13FBMemory::field<IORecursiveLock *>(fb,0x4220);
     if(!mutex) {return kIOReturnNotReady;}
     fb->retain();path->retain();IORecursiveLockLock(mutex);
-    uint64_t record[16] {1};bool released=false,detached=false;IOService *withdrawn=nullptr;
+    uint64_t record[40] {4};bool released=false,detached=false;IOService *withdrawn=nullptr;
     IOLockLock(c.lock);const auto pipe=Display13FBMemory::boundPipe(c.pipe,fb);
     const auto binding=adlnInspectPathBinding(fb,path,callbackXE->adlnPlatform,callbackXE->adlnOutputWiring);
     const bool selected=pipe<3 && binding.status==TGLFBBinding::Status::Complete && binding.pipe==pipe;
     record[1]=pipe;record[2]=selected;record[3]=binding.ddi;
     const auto countOffset=Display13FBMemory::pathCountOffset(fb);
     record[4]=countOffset ? Display13FBMemory::field<uint32_t>(fb,countOffset) : UINT32_MAX;
+    // Observe the same contract under the existing locks. The report has no
+    // effect on selected/released or on the existing refusal/fault policy.
+    const auto expected=display13FBExpectedOwner(c.controller),logical=dsiLogicalSurface(fb);
+    const auto evidence=Display13AssociationEvidence::inspect(c.controller,
+        c.controller ? static_cast<IOService *>(c.controller)->getMetaClass()->getClassSize() : 0,
+        fb,fb->getMetaClass()->getClassSize(),expected,true,logical);
+    record[16]=static_cast<uint32_t>(binding.status);record[17]=binding.pipe;
+    record[18]=reinterpret_cast<uintptr_t>(path);record[19]=Display13FBMemory::field<uint8_t>(fb,0x4288);
+    record[20]=evidence.nativeSurface;record[21]=pipe<3 ? c.pipe[pipe].publishedScanout : 0;
+    record[24]=evidence.failures;record[25]=evidence.owner;record[26]=expected;
+    record[27]=evidence.surface;record[28]=logical;record[29]=evidence.transition;
+    record[30]=evidence.controllerLink;record[31]=reinterpret_cast<uintptr_t>(c.controller);
+    record[32]=evidence.index;record[33]=evidence.count;record[34]=evidence.arrayLink;
+    record[35]=Display13FBMemory::field<uint32_t>(path,0x3644);record[36]=countOffset;
+    record[37]=reinterpret_cast<uintptr_t>(fb);
     IOLockUnlock(c.lock);
     const bool memoryReleased=!selected || adlnFreeStoppedPipe(fb);
     IOLockLock(c.lock);
+    record[22]=memoryReleased;
     if(selected) {
         c.pipe[pipe].destroyingPath=true;
         bool pinned=false;for(const auto &stored:display13FBSysMem.slot)if(stored.framebuffer==fb && stored.buffer)pinned=true;
@@ -9094,7 +9111,13 @@ uint32_t XE::releaseDisplay13Path(IOService *fb,OSObject *path) {
     if((pipe<3 && !selected) || (selected && (!released || !detached))) {
         IOLockLock(c.lock);
         if(pipe<3)c.pipe[pipe].destroyingPath=false;
-        adlnFault(c.memoryFaulted,__LINE__);IOLockUnlock(c.lock);
+        adlnFault(c.memoryFaulted,__LINE__);record[11]=c.memoryFaulted;
+        record[23]=(released?1U:0U)|(detached?2U:0U);IOLockUnlock(c.lock);
+        static uint32_t refusalPublished=0;
+        const auto bit=1U<<(pipe<3 ? pipe : 3);
+        if(!(__atomic_fetch_or(&refusalPublished,bit,__ATOMIC_RELAXED)&bit))
+            adlnPublishMemory("N97FBFirstPathFreeRefused",pipe,record,sizeof(record));
+        adlnPublishMemory("N97FBPathFreeRefused",pipe,record,sizeof(record));
         IORecursiveLockUnlock(mutex);path->release();fb->release();return kIOReturnNotReady;
     }
     // DSI has no audio link or normal-DDI port reset. Dispose only its proven

@@ -1,4 +1,5 @@
 #include "kern_display13_fb_memory.hpp"
+#include "kern_display13_association_evidence.hpp"
 #include "kern_display13_retirement.hpp"
 #include <cassert>
 #include <cstdio>
@@ -37,6 +38,8 @@ struct {unsigned admittedPipes{};}display13FBIRQ;
 struct Display13FBDBUFIO {void *map;};
 void adlnFault(bool &fault,unsigned){fault=true;}
 void adlnPublishMemory(const char*,unsigned,void*,size_t){}
+static uintptr_t display13FBExpectedOwner(IOService*){return 0;}
+static uintptr_t dsiLogicalSurface(IOService*){return 0;}
 struct XE {
  bool display13FramebufferRequested=true;struct Wiring{unsigned value=0x78,dsi=0;operator unsigned()const{return value;}Wiring &operator=(unsigned v){value=v;return *this;}}adlnOutputWiring;void *adlnPlatform{};
  uintptr_t orgAlderLakeNFreePath{},orgDisplay13FreeResources{},orgDisplay13AllocateResources{};

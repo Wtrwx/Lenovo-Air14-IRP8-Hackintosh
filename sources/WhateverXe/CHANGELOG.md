@@ -6,6 +6,7 @@ Use the latest [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphi
 
 ### Added
 
+- Add CPU-only failure details for guarded display-path association checks without changing teardown admission.
 - Add an optional internal-eDP-only policy for Alder Lake-N / Twin Lake and mobile Alder/Raptor Lake boards; external display outputs are disabled when selected.
 - Add an optional eDP and fixed Combo HDMI policy for the same boards, retaining qualified firmware routes while excluding DisplayPort and Type-C outputs.
 - Add USB-C DisplayPort Alt Mode output on Alder Lake-class GPUs, including multi-display startup and reconnection.
