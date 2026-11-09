@@ -151,5 +151,6 @@
   "-wex-dsi-hdmi-test": [],
   "-wex-dsi-power-test": [],
   "-wex-video-progressive-fix": [],
-  "-wex-video-vcs-diagnostic": []
+  "-wex-video-vcs-diagnostic": [],
+  "-wex-wake-memory-observe": []
 }
