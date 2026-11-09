@@ -10790,7 +10790,7 @@ bool XE::adlnPowerReference(void *power,uint32_t operation,uint32_t domain) {
 		IOLockLock(c.lock);const bool enable=!c.engineEnabled && !c.bridge.state.suspended && !c.bridge.state.faulted;IOLockUnlock(c.lock);
 		if(enable)wrapAlderLakeNEngineEnable(power);
 	}
-	uint64_t record[32] {},check[21] {2,operation,domain},auxRecord[10] {},context[24] {},gateEvidence[8] {}; Display13Power::Result result;
+	uint64_t record[32] {},check[25] {3,operation,domain},auxRecord[10] {},context[24] {},gateEvidence[8] {}; Display13Power::Result result;
 	IOWorkLoop *acquiredGate=nullptr;
 	Display13FBIRQ::PowerReleaseScope releaseScope;uint64_t irqRelease[12] {};
 	bool previousQuiescing=false;uint32_t previousBlocked=0;
@@ -10861,8 +10861,14 @@ bool XE::adlnPowerReference(void *power,uint32_t operation,uint32_t domain) {
 			}
 			gateEvidence[6]=gateReady;
 		}
+		check[21]=Display13WM::busyPipes(c.pipe);check[22]=Display13WM::busyPipes(c.pipe,true);
+		check[23]=c.dbuf.updating;check[24]=adlnIRQOwner(static_cast<IOService *>(c.controller));
+		// A stopped external pipe can retain an unlatched WM retirement token.
+		// Multi-output release proves hardware consumers stopped and native IRQ
+		// queues drained below; programming/committing still exclude entry.
+		// The single-output path retains its stricter pending-token check.
 		if(released && gateReady && !c.dbuf.updating &&
-			!(Display13WM::busyPipes(c.pipe,true)&affected) && adlnIRQOwner(static_cast<IOService *>(c.controller))) {
+			!(Display13WM::busyPipes(c.pipe,!Display13FBTopology::multiOutputWiring(callbackXE->adlnOutputWiring))&affected) && adlnIRQOwner(static_cast<IOService *>(c.controller))) {
 			auto &irq=display13FBIRQ;Display13FBIRQIO irqIO {irq.base};
 			const auto saved=IOSimpleLockLockDisableInterrupt(irq.lock);
 			if(Display13FBTopology::multiOutputWiring(callbackXE->adlnOutputWiring)) {

@@ -13,8 +13,8 @@ Use the latest [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphi
 
 ### Fixed
 
+- Allow stopped external display paths to release their last power reference despite an unlatched watermark token, while retaining hardware-stop, interrupt-drain and active-programming checks.
 - Ignore VBL callbacks from detached or foreign display paths before global IRQ state changes; preserve real failures for valid display owners.
-
 - Reject buffer-allocation and watermark setup/update callbacks without a current display-path owner before changing active plans or global fault state; retain strict fault handling for invalid inputs on an owned path.
 - Allow firmware multi-display startup to retain a qualified internal eDP primary display while retiring external boot scanouts, preserving panel sequencing and source-state checks.
 - Correct Display 13 watermark bandwidth admission for uncompressed RGB scanout by converting the donor clock ABI to physical CDCLK before applying the two-pixels-per-clock requirement. Preserve timing, cursor, register-readback and live-surface checks. This does not resolve the separate intermittent GPU render hang.
