@@ -88,6 +88,24 @@ inline Readout inspect(const Objects &o,const XELP::NativePorts &ports,bool atta
     }
     r.status=Status::Complete;return r;
 }
+// Donor frees paths and scanout before cleanupLogicalFramebuffer. A logical
+// buffer is opaque to retirement: never dereferenced or claimed here. Require
+// the independently published physical path and revalidate its complete graph.
+inline Readout inspectRetiring(Objects o,const XELP::NativePorts &ports,
+                              const PublishedPath &published,unsigned pipe) {
+    using Display13FBMemory::field;
+    if(pipe>=3 || !o.accelerator || !o.framebuffer.pointer || !o.path.pointer ||
+       o.framebuffer.bytes<0x4B90 || o.path.bytes<0x3730 ||
+       published.framebuffer!=reinterpret_cast<uintptr_t>(o.framebuffer.pointer) ||
+       published.path!=reinterpret_cast<uintptr_t>(o.path.pointer) ||
+       published.binding.status!=Status::Complete || published.binding.pipe!=pipe ||
+       field<uint32_t>(o.path.pointer,0x3644)==2)return {};
+    o.logicalSurface=field<uintptr_t>(o.framebuffer.pointer,0x4340);
+    const auto r=inspect(o,ports,true);const auto &b=published.binding;
+    if(r.status!=Status::Complete || r.framebuffer!=b.framebuffer ||
+       r.pipe!=b.pipe || r.ddi!=b.ddi || r.plane!=b.plane)return {};
+    return r;
+}
 // Transport qualification precedes the shared native object binding.
 inline Readout inspect(const Objects &o,const void *platform,const Display13OutputWiring &w,bool attached=false) {
     return inspect(o,Display13FBTopology::boundPorts(platform,w),attached);

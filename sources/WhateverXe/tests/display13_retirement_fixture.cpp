@@ -54,7 +54,7 @@ struct XE {
  static bool display13RetirementHealthy(),wrapDisplay13AllocateResources(void*),retireDisplay13Controller(void*);
 }state,*callbackXE=&state;
 template<class T>void put(void*p,unsigned off,T value){memcpy(static_cast<uint8_t*>(p)+off,&value,sizeof(value));}
-TGLFBBinding::Readout adlnInspectPathBinding(IOService*f,OSObject*p,void*,unsigned){
+TGLFBBinding::Readout adlnInspectRetiringPathBinding(IOService*f,OSObject*p,void*,unsigned){
  const auto pipe=Display13FBMemory::boundPipe(display13FBPower.pipe,f);
  if(!p||Display13FBMemory::field<void*>(p,0x32b0)!=f)return {};
  return {TGLFBBinding::Status::Complete,pipe,3};
@@ -165,6 +165,10 @@ int main(int argc,char**argv){
  assert(!display13FBPower.pipe[0].memoryFramebuffer);
  setup(native);state.display13FramebufferRequested=false;display13FBPower.memoryFaulted=true;
  assert(XE::display13RetirementHealthy()&&XE::retireDisplay13Controller(nullptr)); // other backends unchanged
+ failure=0;setup(native);
+ put(fb,0x4340,uintptr_t(0x4567000));
+ assert(!XE::wrapDisplay13FreeResources(fb) && pathCalls==1 && postCalls==4);
+ assert(Display13FBMemory::field<uintptr_t>(fb,0x4340)==0x4567000); // opaque to path release
  if(image)munmap(image,bytes);
  puts("PASS D13 production path/loop/return: memory refusal, false memory success, DDB refusal after partial release, no progress, active path, excess count, AGDC error, allocation/pool blocking, peer preservation and success");
 }

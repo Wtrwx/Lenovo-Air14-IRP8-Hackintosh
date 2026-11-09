@@ -14,6 +14,8 @@ Use the latest [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphi
 
 ### Fixed
 
+- Preserve native scaled logical buffers while retiring already-published stopped display paths; keep allocation and backing validation strict.
+
 - Stop a lingering cursor on a qualified external display path before its final DDI power release, preserving peer displays and rejecting active timing, planes or pending native work.
 - Allow stopped external display paths to release their last power reference despite an unlatched watermark token, while retaining hardware-stop, interrupt-drain and active-programming checks.
 - Ignore VBL callbacks from detached or foreign display paths before global IRQ state changes; preserve real failures for valid display owners.

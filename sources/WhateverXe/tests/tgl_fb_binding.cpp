@@ -27,6 +27,22 @@ struct Fixture {
     void attach() {put(fb,0x49E8,uint32_t(1));put(fb,0x49F0,static_cast<const void *>(path));}
 };
 int main() {
+    {Fixture x(1,1,1);x.attach();constexpr uintptr_t owner=0x1234000;
+     put(x.ctl,0xC0,owner);PublishedPath p;
+     assert(publish(p,reinterpret_cast<uintptr_t>(x.fb),reinterpret_cast<uintptr_t>(x.path),x.inspect(true,owner),1));
+     put(x.fb,0x4340,uintptr_t(0x4567000));put(x.path,0x3644,uint32_t(1));
+     assert(x.inspect(true,owner).status==Status::Association);
+     auto check=[&](const PublishedPath &v){return inspectRetiring(x.objects(owner),Display13FBTopology::boundPorts(x.platform,x.wiring),v,1);};
+     assert(check(p).status==Status::Complete);
+     auto bad=p;bad.path^=1;assert(check(bad).status!=Status::Complete);
+     bad=p;bad.framebuffer^=1;assert(check(bad).status!=Status::Complete);
+     bad=p;bad.binding.ddi=2;assert(check(bad).status!=Status::Complete);
+     put(x.path,0x3644,uint32_t(2));assert(check(p).status!=Status::Complete);put(x.path,0x3644,uint32_t(1));
+     put(x.ctl,0xE49,uint8_t(1));assert(check(p).status!=Status::Complete);put(x.ctl,0xE49,uint8_t(0));
+     put(x.ctl,0xC0,uintptr_t(0));assert(check(p).status!=Status::Complete);put(x.ctl,0xC0,owner);
+     put(x.plane,0x70,uintptr_t(0));assert(check(p).status!=Status::Complete);
+    }
+
     // Derive the release masks from validated attached paths. Here physical
     // DDI B is pipe A/FB2, while physical DDI A is pipe B/FB0.
     {Fixture a(2,0,1),b(0,1,0);a.attach();b.attach();PublishedPath paths[3];

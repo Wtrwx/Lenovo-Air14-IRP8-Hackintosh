@@ -4795,7 +4795,6 @@ static TGLFBBinding::Readout adlnInspectPathBinding(IOService *fb,OSObject *path
 	return TGLFBBinding::inspect(objects,platform,wiring,attached);
 }
 
-
 // Find the native bitmap claim, never infer a slot from FB/pipe/DDI index.
 // The controller retains its FB array; the caller retains the result before
 // acquiring the FB's recursive mutex and then revalidates the claim.
@@ -5231,7 +5230,7 @@ struct Display13SurfaceIO {
 
 // Caller holds the display-owner lock. Mapping is owned by PowerInit, not a
 // register-access callback with an unknown lifetime or an on-read serializer.
-static Display13FBMemory::Readout display13FBInspectMemory(IOService *fb,bool bootScanout=true,unsigned pipe=0,bool publish=true) {
+static Display13FBMemory::Readout display13FBInspectMemory(IOService *fb,bool bootScanout=true,unsigned pipe=0,bool publish=true,uintptr_t retiringLogical=0) {
 	auto &c=display13FBPower;
 	Display13FBMemory::Readout r;
 	auto controller=static_cast<IOService *>(c.controller);
@@ -5251,7 +5250,7 @@ static Display13FBMemory::Readout display13FBInspectMemory(IOService *fb,bool bo
 		Display13SurfaceIO io {c.map,pipe};
 		const auto reserve=owner ? Display13FBMemory::field<uint32_t>(reinterpret_cast<void *>(owner),0x13C0) : 0;
 		c.pipe[pipe].scanout=Display13FBMemory::inspectSurface(io,controller,controller->getMetaClass()->getClassSize(),
-			fb,fb->getMetaClass()->getClassSize(),owner,reserve,(c.map->getLength()-0x800000)/8*4096,xelpMemory,dsiLogicalSurface(fb));
+			fb,fb->getMetaClass()->getClassSize(),owner,reserve,(c.map->getLength()-0x800000)/8*4096,xelpMemory,retiringLogical ? retiringLogical : dsiLogicalSurface(fb));
 		adlnPublishMemory("N97FBAcceleratorBacking",pipe,&c.pipe[pipe].scanout,sizeof(c.pipe[pipe].scanout));
 		const auto prefix=__atomic_load_n(&display13FBGTT.sharedPoolPrefix,__ATOMIC_ACQUIRE);
 		const bool dualReservation=prefix && prefix==reserve && adlnSysMemOwner(controller,Display13FBMemory::pool(controller));
@@ -8948,6 +8947,26 @@ void XE::wrapAlderLakeNScanoutFree(IOService *fb) {
 	if(handoff[1])root->setProperty("N97FBStolenHandoff",handoff,sizeof(handoff));
 	if(!root->getProperty("N97FBMemoryFirstFree"))root->setProperty("N97FBMemoryFirstFree",record,sizeof(record));
 }
+static TGLFBBinding::Readout adlnInspectRetiringPathBinding(IOService *fb,OSObject *path,
+                                                 const void *platform,const Display13OutputWiring &wiring,bool attached=true) {
+    const auto strict=adlnInspectPathBinding(fb,path,platform,wiring,attached);
+    if(strict.status==TGLFBBinding::Status::Complete || wiring.dsi)return strict;
+	auto controller=static_cast<IOService *>(display13FBPower.controller);
+	if(!controller || !fb || !path || controller->getMetaClass()->getClassSize()<0x1C20 ||
+		fb->getMetaClass()->getClassSize()<0x4B90 || path->getMetaClass()->getClassSize()<0x3730)return {};
+	auto plane=Display13FBMemory::field<OSObject *>(path,0x32C8);
+	auto port=Display13FBMemory::field<OSObject *>(path,0x3648);
+	const TGLFBBinding::Objects objects {
+		{controller,controller->getMetaClass()->getClassSize()}, {fb,fb->getMetaClass()->getClassSize()},
+		{path,path->getMetaClass()->getClassSize()}, {plane,plane ? plane->getMetaClass()->getClassSize() : 0},
+		{port,port ? port->getMetaClass()->getClassSize() : 0}, display13FBExpectedOwner(controller),dsiLogicalSurface(fb)
+	};
+    const auto pipe=Display13FBMemory::boundPipe(display13FBPower.pipe,fb);
+    if(pipe>=3)return {};
+    return TGLFBBinding::inspectRetiring(objects,Display13FBTopology::boundPorts(platform,wiring),
+        display13FBPower.pipe[pipe].powerPath,pipe);
+}
+
 // A stopped-pipe release owns only its memory/IRQ/DDB consumers. It does not
 // stop shared CDCLK/engine or destroy the native path/DDI power lease.
 bool XE::adlnFreeStoppedPipe(IOService *fb) {
@@ -8966,11 +8985,12 @@ bool XE::adlnFreeStoppedPipe(IOService *fb) {
     const auto mask=controller ? Display13FBMemory::field<uint32_t>(controller,0xDF0) : 0;
     const auto surface=Display13FBMemory::field<uintptr_t>(fb,0x4348);
     const auto pool=slot<3 ? Display13FBMemory::pool(controller,slot) : Display13FBMemory::Pool {};
-    const auto binding=adlnInspectPathBinding(fb,Display13FBMemory::singlePath<OSObject *>(fb),callbackXE->adlnPlatform,callbackXE->adlnOutputWiring);
+    const auto binding=adlnInspectRetiringPathBinding(fb,Display13FBMemory::singlePath<OSObject *>(fb),callbackXE->adlnPlatform,callbackXE->adlnOutputWiring);
     bool pinned=false;for(const auto &stored:display13FBSysMem.slot)if(stored.framebuffer==fb && stored.buffer)pinned=true;
+    const auto logical=callbackXE->adlnOutputWiring.dsi ? dsiLogicalSurface(fb) : Display13FBMemory::field<uintptr_t>(fb,0x4340);
     const bool noResource=controller && slot==0xFF && !surface && !pinned &&
         Display13FBMemory::bitmapValid(count,used,mask) &&
-        Display13FBMemory::associations(controller,0x1C20,fb,fb->getMetaClass()->getClassSize(),display13FBExpectedOwner(controller),true) &&
+        Display13FBMemory::associations(controller,0x1C20,fb,fb->getMetaClass()->getClassSize(),display13FBExpectedOwner(controller),true,logical) &&
         (pipe>=3 || (!__atomic_load_n(&c.pipe[pipe].publishedScanout,__ATOMIC_ACQUIRE) && !c.pipe[pipe].scanout.record));
     bool ready=pipe<3 && controller && callbackXE->display13FBLifecycleHooksReady && !c.memoryFaulted && !c.clockFaulted &&
         !c.bridge.state.faulted && !c.dbuf.faulted && !(c.dbuf.updating&(1U<<pipe)) &&
@@ -8987,7 +9007,7 @@ bool XE::adlnFreeStoppedPipe(IOService *fb) {
     if(noResource) {record[2]=2;freed=true;ready=false;}
     else if(handoff)record[2]=1;
     else if(ready) {
-        const auto backing=display13FBInspectMemory(fb,false,pipe,false);
+        const auto backing=display13FBInspectMemory(fb,false,pipe,false,logical);
         ready=backing.status==Display13FBMemory::Status::Complete &&
             (surface ? (slot==0xFF && c.pipe[pipe].scanout.status==Display13FBMemory::SurfaceStatus::Complete &&
                 c.pipe[pipe].scanout.record==surface) : (slot<3 && Display13FBMemory::same(pool,backing.pool)));
@@ -9032,7 +9052,7 @@ bool XE::adlnFreeStoppedPipe(IOService *fb) {
         const auto afterUsed=Display13FBMemory::field<uint8_t>(controller,0xDF4);
         const auto afterMask=Display13FBMemory::field<uint32_t>(controller,0xDF0);
         const auto afterSlot=Display13FBMemory::field<uint8_t>(fb,0x4288);
-        freed=!c.memoryFaulted && Display13FBMemory::field<uint8_t>(controller,0xDF5)==count &&
+        freed=Display13FBMemory::field<uintptr_t>(fb,0x4340)==logical && !c.memoryFaulted && Display13FBMemory::field<uint8_t>(controller,0xDF5)==count &&
             Display13FBMemory::slotReturned(count,slot,used,mask,afterUsed,afterMask,afterSlot) &&
             !Display13FBMemory::field<uintptr_t>(fb,0x4348);
         if(freed && slot<3) {
@@ -9071,7 +9091,7 @@ uint32_t XE::releaseDisplay13Path(IOService *fb,OSObject *path) {
     fb->retain();path->retain();IORecursiveLockLock(mutex);
     uint64_t record[40] {4};bool released=false,detached=false;IOService *withdrawn=nullptr;
     IOLockLock(c.lock);const auto pipe=Display13FBMemory::boundPipe(c.pipe,fb);
-    const auto binding=adlnInspectPathBinding(fb,path,callbackXE->adlnPlatform,callbackXE->adlnOutputWiring);
+    const auto binding=adlnInspectRetiringPathBinding(fb,path,callbackXE->adlnPlatform,callbackXE->adlnOutputWiring);
     const bool selected=pipe<3 && binding.status==TGLFBBinding::Status::Complete && binding.pipe==pipe;
     record[1]=pipe;record[2]=selected;record[3]=binding.ddi;
     const auto countOffset=Display13FBMemory::pathCountOffset(fb);

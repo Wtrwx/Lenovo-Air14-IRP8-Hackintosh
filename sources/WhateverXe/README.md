@@ -94,7 +94,7 @@ These settings are unnecessary at 96MB and do not increase firmware-allocated me
 
 The common regression checks cover Metal, OpenGL, OpenCL, hardware H.264 encode/decode and HEVC decode. The table summarizes OS coverage and configuration-specific display features.
 
-Standalone framebuffer tests also check that rejected display-path callbacks leave active watermark plans and unrelated display interrupts intact, and that external-path power release retires only owned cursors after timing and other hardware consumers stop and interrupts drain; these CPU checks do not establish hardware sleep/wake or restart reliability.
+Standalone framebuffer tests also check that rejected display-path callbacks leave active watermark plans and unrelated display interrupts intact, and that external-path power release retires only owned cursors after timing and other hardware consumers stop and interrupts drain; they also cover retirement while a scaled logical buffer remains under native ownership. These CPU checks do not establish hardware sleep/wake or restart reliability.
 
 | Configuration | Verified coverage |
 | --- | --- |
