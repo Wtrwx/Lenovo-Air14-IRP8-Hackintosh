@@ -334,7 +334,7 @@ inline bool rejectStop(StopEvidence *e,uint32_t reg,uint32_t value,uint32_t pipe
     if(e)*e={reg,value,pipe};
     return false;
 }
-template<class IO> bool consumersStopped(IO &io,uint32_t pipes,const Display13Transcoder::Bindings &transcoders={},StopEvidence *e=nullptr) {
+template<class IO> bool consumersStopped(IO &io,uint32_t pipes,const Display13Transcoder::Bindings &transcoders={},StopEvidence *e=nullptr,uint32_t stoppingCursors=0) {
     if(e)*e={};
     if(!transcoders.valid())return rejectStop(e,0,1);
     const auto wells=io.read(Driver);
@@ -344,7 +344,7 @@ template<class IO> bool consumersStopped(IO &io,uint32_t pipes,const Display13Tr
         const auto conf=Display13Transcoder::control(io,p,transcoders),cursor=io.read(0x70080+0x1000*p);
         const auto trans=io.read(transcoders.function(p));
         if(conf==UINT32_MAX || (conf&0xC0000000))return rejectStop(e,transcoders.control(p),conf,p);
-        if(cursor==UINT32_MAX || (cursor&63))return rejectStop(e,0x70080+0x1000*p,cursor,p);
+        if(cursor==UINT32_MAX || ((cursor&63) && !(stoppingCursors&(1U<<p))))return rejectStop(e,0x70080+0x1000*p,cursor,p);
         if(trans==UINT32_MAX || (trans&Enable))return rejectStop(e,transcoders.function(p),trans,p);
         if(transcoders.dsi(p)) {
             const auto normal=io.read(0x60400+0x1000*p);
@@ -483,7 +483,8 @@ struct PowerReleaseScope {
 };
 template<class IO> Status beginPowerRelease(IO &io,State &s,PowerReleaseScope &g,uint32_t domains,uint32_t pipes,
                                            unsigned displayHandlers,unsigned softwareHandlers,
-                                           uint32_t queued,uint32_t auxiliary,uint32_t hotplug) {
+                                           uint32_t queued,uint32_t auxiliary,uint32_t hotplug,uint32_t stoppingCursors=0) {
+    if(stoppingCursors&~pipes)return Status::Unavailable;
     if(g.held || !s.begun || s.faulted || !domains || !pipes || (pipes&~7U) ||
        (pipes&affectedPipes(domains,0,0,0,0,0,0,0))!=affectedPipes(domains,0,0,0,0,0,0,0))return Status::Unavailable;
     uint32_t events=0;for(unsigned p=0;p<3;++p)if(pipes&(1U<<p))events|=pipeEvents(p);
@@ -492,7 +493,7 @@ template<class IO> Status beginPowerRelease(IO &io,State &s,PowerReleaseScope &g
     if(displayHandlers || softwareHandlers || (queued&events) || auxiliary || (hotplug&hpd))return Status::Unavailable;
     const auto master=io.read(Master),wells=io.read(Driver);
     if(master==UINT32_MAX || wells==UINT32_MAX || bool(master&Enable)!=s.enabled)return Status::Readback;
-    if(!consumersStopped(io,pipes,s.transcoders,&g.stop))return Status::Topology;
+    if(!consumersStopped(io,pipes,s.transcoders,&g.stop,stoppingCursors))return Status::Topology;
     // Preflight every bank before parking any. A never-configured bank must
     // already have all notifications masked; it is not ours to clear.
     for(unsigned p=0;p<3;++p)if(pipes&(1U<<p)) {
@@ -511,6 +512,15 @@ template<class IO> Status beginPowerRelease(IO &io,State &s,PowerReleaseScope &g
     g.held=true;g.enabled=s.enabled;g.master=master;g.affected=pipes;
     io.write(Master,0);s.enabled=false;
     if(io.read(Master)&Enable)return fail(io,s,Status::Readback);
+    // Qualified native last-DDI teardown can leave CURCNTR enabled after
+    // timing has stopped. All other consumers, queues and DSBs were proved
+    // idle above. Disable only the caller-owned cursor bank; no frame wait
+    // or sleep is permitted while the IRQ lock is held.
+    for(unsigned p=0;p<3;++p)if((stoppingCursors&(1U<<p)) && powered(wells,p)) {
+        const auto reg=0x70080+0x1000*p;
+        if(io.read(reg)&63) {io.write(reg,0);io.write(reg+8,0);io.write(reg+4,0);}
+    }
+    if(!consumersStopped(io,pipes,s.transcoders,&g.stop))return fail(io,s,Status::Topology);
     for(unsigned p=0;p<3;++p)if((pipes&s.configured&(1U<<p)) && powered(wells,p)) {
         const auto status=parkStoppedPipe(io,s,p,displayHandlers,softwareHandlers,queued);
         if(status!=Status::Complete)return status;

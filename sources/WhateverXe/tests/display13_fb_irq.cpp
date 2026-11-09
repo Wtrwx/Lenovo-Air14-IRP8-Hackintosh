@@ -260,6 +260,22 @@ int main() {
      if(kind==2) {io.rejectRegister=PipeIIR(1)+4;
       assert(extendActivePipes(io,state,3)==Status::Readback && state.faulted && !(io.r[Master]&Enable));}
     }
+    // Last-DDI cursor retirement: only an explicitly owned, stopped bank is
+    // writable. Active timing/planes/DSB/queues/HPD still reject before writes.
+    for(unsigned kind=0;kind<9;++kind) {
+     IO io;State state;io.r[0x71008]=0xC0000000;assert(enable(io,state,0,NativeGT,3)==Status::Complete);
+     io.r[0x71008]=0;io.r[0x71080]=0x10000022;io.r[0x71084]=0x200000;io.r[0x71088]=7;
+     if(kind==1)io.r[0x71008]=0xC0000000;
+     if(kind==2)io.r[0x71180]=Enable;
+     if(kind==3)io.r[DSBControl(1,0)]=1;
+     if(kind==4)io.r[DSBInterrupt(1,0)]|=1;
+     const auto peer=io.r[0x70080];io.writes.clear();PowerReleaseScope g;
+     const auto result=beginPowerRelease(io,state,g,32,2,0,kind==5,kind==6?pipeEvents(1):0,0,kind==7?12:0,kind==8?0:2);
+     assert((result==Status::Complete)==(kind==0));
+     if(kind)assert(io.writes.empty()&&!g.held);
+     else {assert(io.r[0x71080]==0&&io.r[0x71084]==0&&io.r[0x71088]==0);assert(endPowerRelease(io,state,g)==Status::Complete);}
+     assert(io.r[0x70080]==peer);
+    }
     // Rejection evidence identifies the exact stopped-consumer guard without
     // changing the proof or writing registers on a failed preflight.
     for(unsigned kind=0;kind<11;++kind) {

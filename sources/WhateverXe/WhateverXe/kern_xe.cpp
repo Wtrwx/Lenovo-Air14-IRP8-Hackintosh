@@ -10881,7 +10881,9 @@ bool XE::adlnPowerReference(void *power,uint32_t operation,uint32_t domain) {
 				irqRelease[6]=queued;irqRelease[7]=aux;irqRelease[8]=hpd;
 				const auto status=!irq.quiescing && irq.scopes.total==irq.handlers ?
 					Display13FBIRQ::beginPowerRelease(irqIO,irq.state,releaseScope,released,affected,
-						irq.scopes.display,irq.softwareHandlers,queued,aux,hpd) : Display13FBIRQ::Status::Unavailable;
+						irq.scopes.display,irq.softwareHandlers,queued,aux,hpd,
+                        operation==4 && mapValid && domain<7 && (known&(1U<<domain)) &&
+                        released==Display13Power::ddiDomain(domain) ? affected : 0) : Display13FBIRQ::Status::Unavailable;
 				irqRelease[12]=releaseScope.stop.reg;irqRelease[13]=releaseScope.stop.value;irqRelease[14]=releaseScope.stop.pipe;
 				irqRelease[9]=static_cast<uint32_t>(status);releaseAllowed=status==Display13FBIRQ::Status::Complete;
 				if(releaseScope.held) {irq.quiescing=true;irq.blockedPipes=affected;}
