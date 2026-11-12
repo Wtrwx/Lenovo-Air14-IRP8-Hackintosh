@@ -152,5 +152,10 @@
   "-wex-dsi-power-test": [],
   "-wex-video-progressive-fix": [],
   "-wex-video-vcs-diagnostic": [],
-  "-wex-wake-memory-observe": []
+  "-wex-wake-memory-observe": [],
+  "-wex-video-submit-audit": [],
+  "-wex-video-nv12-format": [],
+  "-wex-video-vdenc-six-dword": [],
+  "-wex-video-submit-metadata": [],
+  "-wex-video-event-metadata": []
 }

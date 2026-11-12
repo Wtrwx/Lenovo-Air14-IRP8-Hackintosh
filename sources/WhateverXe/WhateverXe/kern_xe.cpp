@@ -1,4 +1,6 @@
 #include "kern_tgl_video_progressive.hpp"
+#include "kern_tgl_video_surface.hpp"
+#include "kern_tgl_video_audit.hpp"
 #include "kern_display13_color.hpp"
 #include "kern_display13_hdmi_caps.hpp"
 #include "kern_display13_hdmi_scdc.hpp"
@@ -80,6 +82,8 @@
 #include "kern_tgl_hang_refs.hpp"
 #include "kern_tgl_hang_media.hpp"
 #include "kern_tgl_hang_video.hpp"
+#include "kern_tgl_video_resource_metadata.hpp"
+#include "kern_tgl_video_submit_metadata.hpp"
 #include "kern_tgl_hang_pending.hpp"
 #include "kern_tgl_hang_detail.hpp"
 #include "kern_tgl_hang_ggtt.hpp"
@@ -295,6 +299,31 @@ void XE::tglRecordStartOrder(unsigned stage,void *object,unsigned ddi,
 static uint64_t *tglBlitScratchSize;
 static uint64_t tglPPGTTClass;
 static bool tglHangVideoEnabled;
+static bool tglVideoProgressiveEnabled, tglVideoAuditEnabled, tglVideoSurfaceEnabled, tglVideoSixDWORDEnabled;
+static bool tglVideoSubmitMetadataEnabled;
+static bool tglVideoEventMetadataEnabled;
+static uint32_t tglVideoSubmitMetadataConsumed;
+static TGLVideoAudit::History<> tglVideoAudit;
+// Preserve video-engine receipts independently of unrelated desktop traffic.
+static TGLVideoAudit::History<> tglVideoVCSAudit;
+static uint64_t tglVideoAuditSkipped;
+static bool tglVideoAuditSerialize(void *,void *ref,OSSerialize *serializer) {
+ auto &history=ref?*static_cast<TGLVideoAudit::History<> *>(ref):tglVideoAudit;
+ const uint64_t header[8] {4,sizeof(TGLVideoAudit::Record),TGLVideoAudit::Recent,TGLVideoAudit::Early,
+  __atomic_load_n(&history.attempts,__ATOMIC_ACQUIRE),
+  __atomic_load_n(&history.drops,__ATOMIC_ACQUIRE),
+  __atomic_load_n(&tglVideoAuditSkipped,__ATOMIC_ACQUIRE),history.stopped()};
+ auto record=static_cast<TGLVideoAudit::Record *>(IOMalloc(sizeof(TGLVideoAudit::Record)));
+ auto data=OSData::withCapacity(sizeof(header)+(TGLVideoAudit::Recent+TGLVideoAudit::Early)*(sizeof(TGLVideoAudit::Record)+8));
+ if(!record || !data){if(record)IOFree(record,sizeof(*record));if(data)data->release();return false;}
+ bool ok=data->appendBytes(header,sizeof(header));
+ for(unsigned i=0;i<TGLVideoAudit::Early+TGLVideoAudit::Recent && ok;++i) {
+  bzero(record,sizeof(*record));
+  const auto sequence=TGLVideoAudit::History<>::copy(i<TGLVideoAudit::Early?history.early[i]:history.recent[i-TGLVideoAudit::Early],*record);
+  ok=data->appendBytes(&sequence,sizeof(sequence)) && data->appendBytes(record,sizeof(*record));
+ }
+ if(ok)ok=data->serialize(serializer);data->release();IOFree(record,sizeof(*record));return ok;
+}
 static uintptr_t tglExtendedBufferReturn;
 static uintptr_t tglBlitPoolSubmit;
 static uint32_t tglBlitDeferredInitCount;
@@ -12234,7 +12263,12 @@ bool XE::processTGLAccelerator(KernelPatcher &patcher, size_t index, mach_vm_add
 			tglHangVideoEnabled=hangOK && TGLHangVideo::admitted(checkKernelArgument("-wex-video-vcs-diagnostic"),
                 xeProfile.identity,xeProfile.revision,XELP::kernelOS(version)==XELP::OS::Tahoe);
             IORegistryEntry::getRegistryRoot()->setProperty("TGLHangVideoCaptureReady",tglHangVideoEnabled);
-            if(checkKernelArgument("-wex-video-progressive-fix") &&
+            const bool videoFixRequested=checkKernelArgument("-wex-video-progressive-fix");
+            const bool videoAuditRequested=checkKernelArgument("-wex-video-submit-audit");
+            const bool videoSurfaceRequested=checkKernelArgument("-wex-video-nv12-format");
+            const bool videoSixRequested=checkKernelArgument("-wex-video-vdenc-six-dword");
+            const bool videoMetadataRequested=checkKernelArgument("-wex-video-submit-metadata");
+            if((videoFixRequested || videoAuditRequested || videoSurfaceRequested) &&
                xeProfile.identity==0xA7A08086 && xeProfile.revision==4 &&
                XELP::kernelOS(version)==XELP::OS::Tahoe) {
              const char *symbol="__ZN20IGHardwareRingBuffer17submitBatchBufferEyjPjjbb";
@@ -12246,7 +12280,28 @@ bool XE::processTGLAccelerator(KernelPatcher &patcher, size_t index, mach_vm_add
              if(ok) {KernelPatcher::RouteRequest route[] {{symbol,wrapTGLVideoBatch,orgTGLVideoBatch}};
               ok=patcher.routeMultiple(index,route,arrsize(route),address,size);}
              patcher.clearError();
-             IORegistryEntry::getRegistryRoot()->setProperty("TGLVideoProgressiveFixReady",ok);
+             tglVideoProgressiveEnabled=ok && videoFixRequested;
+             tglVideoAuditEnabled=ok && videoAuditRequested;
+             tglVideoSubmitMetadataEnabled=tglVideoAuditEnabled && videoMetadataRequested;
+             tglVideoEventMetadataEnabled=tglVideoSubmitMetadataEnabled && checkKernelArgument("-wex-video-event-metadata");
+             // The experimental surface correction requires CPU receipts too.
+             tglVideoSurfaceEnabled=ok && videoSurfaceRequested && videoAuditRequested;
+             // This layout is an independent opt-in for the matched VA emitter.
+             // Require both existing corrections and their CPU receipts too.
+             tglVideoSixDWORDEnabled=ok && videoSixRequested &&
+              tglVideoProgressiveEnabled && tglVideoSurfaceEnabled;
+             IORegistryEntry::getRegistryRoot()->setProperty("TGLVideoProgressiveFixReady",tglVideoProgressiveEnabled);
+             IORegistryEntry::getRegistryRoot()->setProperty("TGLVideoSubmitAuditReady",tglVideoAuditEnabled);
+             IORegistryEntry::getRegistryRoot()->setProperty("TGLVideoSubmitMetadataReady",tglVideoSubmitMetadataEnabled);
+             IORegistryEntry::getRegistryRoot()->setProperty("TGLVideoEventMetadataReady",tglVideoEventMetadataEnabled);
+             IORegistryEntry::getRegistryRoot()->setProperty("TGLVideoSurfaceFixReady",tglVideoSurfaceEnabled);
+             IORegistryEntry::getRegistryRoot()->setProperty("TGLVideoSixDWORDReady",tglVideoSixDWORDEnabled);
+             if(tglVideoAuditEnabled)if(auto live=OSSerializer::forTarget(nullptr,tglVideoAuditSerialize)) {
+              IORegistryEntry::getRegistryRoot()->setProperty("TGLVideoSubmitAudit",live);live->release();
+             }
+             if(tglVideoAuditEnabled)if(auto live=OSSerializer::forTarget(nullptr,tglVideoAuditSerialize,&tglVideoVCSAudit)) {
+              IORegistryEntry::getRegistryRoot()->setProperty("TGLVideoSubmitAuditVCS",live);live->release();
+             }
             }
 
             // Exact failure-only wake call. Native STOP, wake ownership and all
@@ -15496,6 +15551,87 @@ void tglCaptureHangAddress(unsigned slot,uint64_t actualRing,const uint8_t *regs
      refs->q[1]=owned && ctx==c->q[5] && lrc==c->q[10] && table==c->q[8] &&
       id==c->q[6] && root==c->q[11] && !final.status && final.rootPhysical==c->q[12] ? 0 : 2;
      IORegistryEntry::getRegistryRoot()->setProperty("TGLHangVideo0",refs,sizeof(*refs));
+     // Failure-only declared resource spans. No resource payload reads, maps,
+     // virtual calls or GPU operations; all per-role samples are sequential.
+     if(!refs->q[1] && !refs->q[8]) {
+      struct VideoMaps {uint64_t q[8],addresses[12];TGLVideoMap::Receipt receipts[12];};
+      auto maps=static_cast<VideoMaps *>(IOMalloc(sizeof(VideoMaps)));
+      if(maps) {
+       bzero(maps,sizeof(*maps));maps->q[0]=2;maps->q[1]=1;
+       maps->q[2]=c->q[6];maps->q[3]=c->q[7];maps->q[4]=refs->q[24];
+       auto metadataRead=[](uint64_t p,void *out,unsigned n)->uint64_t {
+        return TGLVideoMap::kernelRange(p,n)?tglVM.nofault(p,reinterpret_cast<uint64_t>(out),n):0;
+       };
+       for(unsigned i=0;i<12;++i) {
+        maps->addresses[i]=refs->q[10+i];
+        if(maps->addresses[i] && !(refs->q[24]&(1ULL<<i))) {
+         TGLVideoMap::begin(maps->receipts[i],c->q[7],maps->addresses[i],1,metadataRead);
+         TGLVideoMap::finish(maps->receipts[i],metadataRead);
+        }
+       }
+       uint64_t afterContext=0,afterTask=0,afterID=0;
+       maps->q[1]=tglVMRead(actualRing+0x20,afterContext) && afterContext==c->q[5] &&
+        tglVMRead(afterContext+0x58,afterTask) && afterTask==c->q[7] &&
+        read32(afterContext+0x7c,afterID) && afterID==c->q[6] ? 0 : 1;
+       IORegistryEntry::getRegistryRoot()->setProperty("TGLHangVideoMaps0",maps,sizeof(*maps));
+       IOFree(maps,sizeof(*maps));
+      }
+      // Separate failure-only survey. It cannot enter command-edit admission
+      // or authorize payload reads, and does not invoke virtual methods.
+      struct VideoMapObservations {uint64_t q[8],addresses[12];TGLVideoMap::Observation roles[12];};
+      auto survey=static_cast<VideoMapObservations *>(IOMalloc(sizeof(VideoMapObservations)));
+      if(survey) {
+       bzero(survey,sizeof(*survey));survey->q[0]=1;survey->q[1]=1;
+       survey->q[2]=c->q[6];survey->q[3]=c->q[7];survey->q[4]=refs->q[24];
+       auto metadataRead=[](uint64_t p,void *out,unsigned n)->uint64_t {
+        return TGLVideoMap::kernelRange(p,n)?tglVM.nofault(p,reinterpret_cast<uint64_t>(out),n):0;
+       };
+       for(unsigned i=0;i<12;++i) {
+        survey->addresses[i]=refs->q[10+i];
+        if(survey->addresses[i] && !(refs->q[24]&(1ULL<<i)))
+         TGLVideoMap::observe(survey->roles[i],c->q[7],survey->addresses[i],1,metadataRead);
+       }
+       uint64_t ctx=0,task=0,id=0;
+       survey->q[1]=tglVMRead(actualRing+0x20,ctx) && ctx==c->q[5] &&
+        tglVMRead(ctx+0x58,task) && task==c->q[7] && read32(ctx+0x7c,id) && id==c->q[6]?0:1;
+       IORegistryEntry::getRegistryRoot()->setProperty("TGLHangVideoMapObservations0",survey,sizeof(*survey));
+       IOFree(survey,sizeof(*survey));
+      }
+      // Bounded, failure-only map and associated-resource metadata, independent
+      // of strict edit admission. No GPU commands, register reads or mappings.
+      auto metadata=static_cast<TGLVideoResourceMetadata::Capture *>(IOMalloc(sizeof(TGLVideoResourceMetadata::Capture)));
+      if(metadata) {
+       bzero(metadata,sizeof(*metadata));metadata->q[0]=1;metadata->q[1]=1;
+       metadata->q[2]=c->q[6];metadata->q[3]=c->q[7];metadata->q[4]=c->q[12];
+       metadata->q[5]=TGLVideoResourceMetadata::MaxMaps;metadata->q[6]=TGLVideoResourceMetadata::MaxResources;metadata->q[7]=2;
+       auto metadataRead=[](uint64_t p,void *out,unsigned n)->uint64_t {
+        return TGLVideoMap::kernelRange(p,n)?tglVM.nofault(p,reinterpret_cast<uint64_t>(out),n):0;
+       };
+       auto events=tglVideoEventMetadataEnabled?static_cast<TGLVideoEventMetadata::Capture *>(IOMalloc(sizeof(TGLVideoEventMetadata::Capture))):nullptr;
+       if(events) {
+        TGLVideoEventMetadata::init(*events,c->q[6],c->q[7],c->q[12],actualRing,c->q[5],0,0,1);
+        tglHostClock(events->q+TGLVideoEventMetadata::BeginNS);
+       }
+       for(unsigned i=0;i<2;++i) {
+        TGLVideoResourceMetadata::sample(metadata->samples[i],c->q[7],metadataRead);
+        if(events)TGLVideoEventMetadata::sample(events->samples[i],metadata->samples[i],c->q[7],metadataRead);
+       }
+       uint64_t ctx=0,lrc=0,task=0,table=0,id=0,root=0;
+       const bool owned=tglVMRead(actualRing+0x20,ctx) && tglVMRead(actualRing+0x18,lrc) &&
+        tglVMRead(c->q[5]+0x58,task) && tglVMRead(task+0x260,table) &&
+        read32(c->q[5]+0x7c,id) && lrcRoot(c->q[10],root);
+       auto final=TGLPPGTT::inspect(c->q[8],c->q[2]&~3ULL,tglVMRead);
+       metadata->q[1]=owned && ctx==c->q[5] && lrc==c->q[10] && task==c->q[7] && table==c->q[8] &&
+        id==c->q[6] && root==c->q[12] && !final.status && final.rootPhysical==c->q[12]?0:1;
+       IORegistryEntry::getRegistryRoot()->setProperty("TGLHangVideoResourceMetadata0",metadata,sizeof(*metadata));
+       if(events) {
+        events->q[TGLVideoEventMetadata::Guard]=metadata->q[1];tglHostClock(events->q+TGLVideoEventMetadata::EndNS);
+        IORegistryEntry::getRegistryRoot()->setProperty("TGLHangVideoEventMetadata0",events,sizeof(*events));
+        IOFree(events,sizeof(*events));
+       }
+       IOFree(metadata,sizeof(*metadata));
+      }
+     }
     } else {
     TGLHangRefs::collect(*refs,c->bytes[0],sizeof(c->bytes),c->q[13],c->q[2]&~3ULL,pageRead);
     uint64_t ctx=0,lrc=0,table=0,id=0,root=0;
@@ -15743,34 +15879,246 @@ extern "C" void tglHangPreStopWake(void *owner,bool enable,unsigned domains,unsi
  }
  if(!c.q[1])tglSubmitHistoryRecord(owner,reinterpret_cast<void *>(c.q[6]),UINT32_MAX,2);
  uint64_t freezeTime;tglHostClock(&freezeTime);tglSubmitHistory.freeze(freezeTime);
+ if(tglVideoAuditEnabled){tglVideoAudit.freeze();tglVideoVCSAudit.freeze();}
  tglHostClock(c.q+3);__atomic_store_n(&tglHangPreStopState,2U,__ATOMIC_RELEASE);
 }
 
-// Experimental progressive AVC repair. Donor submission still owns stamps,
-// mapping lifetime, cache coherency and GPU scheduling. No decoder is admitted.
+static void tglVideoAliasBegin(TGLVideoAudit::Record &r,const uint32_t *cpu) {
+ auto &a=r.alias;a.q[TGLVideoAlias::Schema]=1;a.q[TGLVideoAlias::Status]=TGLVideoAlias::NotChecked;
+ a.q[TGLVideoAlias::AtApplyStatus]=TGLVideoAlias::NotChecked;
+ a.q[TGLVideoAlias::Ring]=r.q[TGLVideoAudit::Ring];a.q[TGLVideoAlias::Engine]=r.q[TGLVideoAudit::Engine];
+ a.q[TGLVideoAlias::ExpectedClass]=tglPPGTTClass;a.q[TGLVideoAlias::CPU]=reinterpret_cast<uint64_t>(cpu);
+ a.q[TGLVideoAlias::GPU]=r.q[TGLVideoAudit::GPU];a.q[TGLVideoAlias::Bytes]=r.q[TGLVideoAudit::Words]*4;
+ if(!tglVM.enabled || !tglVM.nofault || !tglPPGTTClass || r.q[TGLVideoAudit::OwnerGuard])return;
+ auto read=[](uint64_t p,void *out,unsigned n)->uint64_t {
+  return TGLVideoAlias::kernelRange(p,n)?tglVM.nofault(p,reinterpret_cast<uint64_t>(out),n):0;
+ };
+ auto walk=[](uint64_t root,uint64_t p) {return TGLVM::inspect(root,tglVM.directBase,tglVM.directEnd,p,tglVMRead);};
+ if(TGLVideoAlias::begin(a,r.q[TGLVideoAudit::Ring],r.q[TGLVideoAudit::Engine],tglPPGTTClass,
+    reinterpret_cast<uint64_t>(cpu),r.q[TGLVideoAudit::GPU],r.q[TGLVideoAudit::Words]*4,tglVM.kernelPmap,read,walk) &&
+    (a.owner[0][TGLVideoAlias::Context]!=r.q[TGLVideoAudit::Context] ||
+     a.owner[0][TGLVideoAlias::ContextID]!=r.q[TGLVideoAudit::ContextID])) {
+  a.q[TGLVideoAlias::Status]=TGLVideoAlias::OwnerChanged;a.q[TGLVideoAlias::BeforeQualified]=0;
+ }
+}
+static bool tglVideoAliasFinish(TGLVideoAudit::Record &r) {
+ if(!tglVM.enabled || !tglVM.nofault)return false;
+ auto read=[](uint64_t p,void *out,unsigned n)->uint64_t {
+  return TGLVideoAlias::kernelRange(p,n)?tglVM.nofault(p,reinterpret_cast<uint64_t>(out),n):0;
+ };
+ auto walk=[](uint64_t root,uint64_t p) {return TGLVM::inspect(root,tglVM.directBase,tglVM.directEnd,p,tglVMRead);};
+ return TGLVideoAlias::finish(r.alias,tglVM.kernelPmap,read,walk);
+}
+// Metadata only; never read mapped video contents or call native map methods.
+// This observation does not authorize command edits or establish a mapping lease.
+static void tglVideoMapBegin(TGLVideoAudit::Record &r) {
+ auto &m=r.map;m.q[TGLVideoMap::Schema]=2;
+ m.q[TGLVideoMap::Status]=m.q[TGLVideoMap::BeforeStatus]=m.q[TGLVideoMap::AfterStatus]=TGLVideoMap::NotChecked;
+ m.q[TGLVideoMap::GPU]=r.q[TGLVideoAudit::GPU];m.q[TGLVideoMap::Bytes]=r.q[TGLVideoAudit::Words]*4;
+ if(!tglVM.nofault)return;
+ auto read=[](uint64_t p,void *out,unsigned n)->uint64_t {
+  return TGLVideoMap::kernelRange(p,n)?tglVM.nofault(p,reinterpret_cast<uint64_t>(out),n):0;
+ };
+ // Large ordinary VCS batches exceed the physical-alias prefix budget. Their
+ // metadata can still be observed after a separate exact ownership check.
+ // Preserve Bounds and BeforeQualified=0: this never qualifies a CPU alias.
+ if(!r.alias.q[TGLVideoAlias::BeforeQualified]) {
+  if(r.q[TGLVideoAudit::Engine]!=3 || r.q[TGLVideoAudit::OwnerGuard] ||
+     r.alias.q[TGLVideoAlias::Status]!=TGLVideoAlias::Bounds ||
+     m.q[TGLVideoMap::Bytes]<=TGLVideoAlias::MaxBytes)return;
+  TGLVideoAlias::Reason reason=TGLVideoAlias::NotChecked;
+  if(!TGLVideoAlias::ownership(r.alias.owner[0],r.q[TGLVideoAudit::Ring],3,
+       r.alias.q[TGLVideoAlias::ExpectedClass],read,reason) ||
+     r.alias.owner[0][TGLVideoAlias::Context]!=r.q[TGLVideoAudit::Context] ||
+     r.alias.owner[0][TGLVideoAlias::ContextID]!=r.q[TGLVideoAudit::ContextID])return;
+ }
+ TGLVideoMap::begin(m,r.alias.owner[0][TGLVideoAlias::Task],m.q[TGLVideoMap::GPU],m.q[TGLVideoMap::Bytes],read);
+}
+static void tglVideoMapFinish(TGLVideoAudit::Record &r) {
+ if(!tglVM.nofault)return;
+ // A changed context/address sample must not trigger traversal of the old task.
+ const bool metadataOnly=!r.alias.q[TGLVideoAlias::BeforeQualified] &&
+  r.q[TGLVideoAudit::Engine]==3 && !r.q[TGLVideoAudit::OwnerGuard] &&
+  r.alias.q[TGLVideoAlias::Status]==TGLVideoAlias::Bounds &&
+  r.map.q[TGLVideoMap::Bytes]>TGLVideoAlias::MaxBytes;
+ if(!metadataOnly && r.alias.q[TGLVideoAlias::Status]!=TGLVideoAlias::Ready) {
+  r.map.q[TGLVideoMap::Status]=TGLVideoMap::Changed;return;
+ }
+ auto read=[](uint64_t p,void *out,unsigned n)->uint64_t {
+  return TGLVideoMap::kernelRange(p,n)?tglVM.nofault(p,reinterpret_cast<uint64_t>(out),n):0;
+ };
+ if(metadataOnly) {
+  TGLVideoAlias::Reason reason=TGLVideoAlias::NotChecked;
+  if(!TGLVideoAlias::ownership(r.alias.owner[1],r.q[TGLVideoAudit::Ring],3,
+       r.alias.q[TGLVideoAlias::ExpectedClass],read,reason) ||
+     memcmp(r.alias.owner[0],r.alias.owner[1],sizeof(r.alias.owner[0])) ||
+     r.alias.owner[1][TGLVideoAlias::Task]!=r.map.q[TGLVideoMap::Task] ||
+     r.alias.owner[1][TGLVideoAlias::Context]!=r.q[TGLVideoAudit::Context] ||
+     r.alias.owner[1][TGLVideoAlias::ContextID]!=r.q[TGLVideoAudit::ContextID]) {
+   r.map.q[TGLVideoMap::Status]=TGLVideoMap::Changed;return;
+  }
+ }
+ TGLVideoMap::finish(r.map,read);
+}
+// One attempt per boot, explicitly enabled under the existing exact donor/
+// hardware/OS audit gates. Never retry, wait, or gate native submission.
+__attribute__((noinline))
+static void tglCaptureVideoSubmitMetadata(const TGLVideoAudit::Record &r) {
+ if(!tglVideoSubmitMetadataEnabled || !TGLVideoSubmitMetadata::eligible(r))return;
+ uint32_t zero=0;
+ if(!__atomic_compare_exchange_n(&tglVideoSubmitMetadataConsumed,&zero,1U,false,__ATOMIC_ACQ_REL,__ATOMIC_RELAXED))return;
+ auto capture=static_cast<TGLVideoSubmitMetadata::Capture *>(IOMalloc(sizeof(TGLVideoSubmitMetadata::Capture)));
+ if(!capture)return;
+ auto events=tglVideoEventMetadataEnabled?static_cast<TGLVideoEventMetadata::Capture *>(IOMalloc(sizeof(TGLVideoEventMetadata::Capture))):nullptr;
+ auto read=[](uint64_t p,void *out,unsigned n)->uint64_t {
+  return TGLVideoMap::kernelRange(p,n)?tglVM.nofault(p,reinterpret_cast<uint64_t>(out),n):0;
+ };
+ uint64_t begin=0;tglHostClock(&begin);
+ TGLVideoSubmitMetadata::collect(*capture,r,read,events);
+ capture->q[TGLVideoSubmitMetadata::BeginNS]=begin;tglHostClock(capture->q+TGLVideoSubmitMetadata::EndNS);
+ IORegistryEntry::getRegistryRoot()->setProperty("TGLVideoSubmitMetadata0",capture,sizeof(*capture));
+ if(events) {
+  events->q[TGLVideoEventMetadata::BeginNS]=begin;
+  events->q[TGLVideoEventMetadata::EndNS]=capture->q[TGLVideoSubmitMetadata::EndNS];
+  IORegistryEntry::getRegistryRoot()->setProperty("TGLVideoSubmitEventMetadata0",events,sizeof(*events));
+  IOFree(events,sizeof(*events));
+ }
+ IOFree(capture,sizeof(*capture));
+}
+// Capture CPU receipts only. Reading does not pin mappings or prove GPU content.
+static TGLVideoAudit::Record *tglBeginVideoAudit(void *ring,uint64_t gpu,uint32_t stamp,uint32_t *cpu,uint32_t words) {
+ using namespace TGLVideoAudit;
+ if(!tglVideoAuditEnabled || tglVideoAudit.stopped())return nullptr;
+ auto skip=[](){__atomic_fetch_add(&tglVideoAuditSkipped,1ULL,__ATOMIC_RELAXED);};
+ if(!tglVM.nofault || !ring || !cpu || !words || words>262144 ||
+    !TGLHangPending::kernelRange(reinterpret_cast<uint64_t>(ring),0x41) ||
+    !TGLHangPending::kernelRange(reinterpret_cast<uint64_t>(cpu),uint64_t(words)*4)){skip();return nullptr;}
+ uint8_t engine=255;
+ if(tglVM.nofault(reinterpret_cast<uint64_t>(ring)+0x40,reinterpret_cast<uint64_t>(&engine),1)!=1 ||
+    (engine!=0 && engine!=3)){skip();return nullptr;}
+ auto r=static_cast<Record *>(IOMalloc(sizeof(Record)));if(!r){skip();return nullptr;}
+ bzero(r,sizeof(*r));auto q=r->q;q[Schema]=4;tglHostClock(q+BeginNS);
+ r->alias.q[TGLVideoAlias::Status]=TGLVideoAlias::NotChecked;
+ r->alias.q[TGLVideoAlias::AtApplyStatus]=TGLVideoAlias::NotChecked;
+ q[Ring]=reinterpret_cast<uint64_t>(ring);q[GPU]=gpu;q[Stamp]=stamp;q[Engine]=engine;q[Words]=words;
+ q[OwnerGuard]=1;q[PlanReason]=UINT64_MAX;q[SurfaceReason]=UINT64_MAX;
+ const unsigned bytes=words>PrefixBytes/4?PrefixBytes:words*4;
+ q[Flags]=words>PrefixBytes/4?1:0;
+ q[CopiedBefore]=tglVM.nofault(reinterpret_cast<uint64_t>(cpu),reinterpret_cast<uint64_t>(r->before),bytes);
+ if(q[CopiedBefore]>bytes)q[CopiedBefore]=0;
+ if(q[CopiedBefore]!=bytes){q[Disposition]=ReadFailed;q[Flags]|=2;return r;}
+ unsigned stop=0;q[Category]=category(r->before,bytes,stop);q[ParseStop]=stop;
+ // Keep unclassified receipts too: the ordinary comparison path may use
+ // a different command family, or classification may stop at an unknown packet.
+ if(!q[Category])q[Flags]|=8;
+ q[HashBefore]=hash(r->before,bytes);
+ uint64_t context=0,back=0;uint32_t id=0;
+ if(tglVMRead(q[Ring]+0x20,context) && TGLHangPending::kernelRange(context,0xb8) &&
+    tglVMRead(context+0xb0,back) && back==q[Ring] &&
+    tglVM.nofault(context+0x7c,reinterpret_cast<uint64_t>(&id),4)==4) {
+  q[Context]=context;q[ContextID]=id;q[OwnerGuard]=0;
+ }
+ tglVideoAliasBegin(*r,cpu);
+ tglVideoMapBegin(*r);
+ return r;
+}
+static void tglFinishVideoAudit(TGLVideoAudit::Record *r,const uint32_t *cpu) {
+ if(!r)return;using namespace TGLVideoAudit;auto q=r->q;
+ const unsigned bytes=static_cast<unsigned>(q[CopiedBefore]);uint64_t h=14695981039346656037ULL;
+ uint8_t scratch[256];
+ for(unsigned at=0;at<bytes;) {
+  const unsigned n=bytes-at<sizeof(scratch)?bytes-at:sizeof(scratch);
+  const auto got=tglVM.nofault(reinterpret_cast<uint64_t>(cpu)+at,reinterpret_cast<uint64_t>(scratch),n);
+  if(got>n){q[Flags]|=4;break;}
+  h=hash(scratch,static_cast<size_t>(got),h);q[CopiedAfter]+=got;at+=static_cast<unsigned>(got);
+  if(got!=n){q[Flags]|=4;break;}
+ }
+ if(q[CopiedAfter]==bytes && bytes)q[HashAfter]=h;
+ tglVideoAliasFinish(*r);
+ tglVideoMapFinish(*r);
+ tglHostClock(q+EndNS);tglCaptureVideoSubmitMetadata(*r);tglVideoAudit.append(*r);
+ if(q[Engine]==3)tglVideoVCSAudit.append(*r);
+ IOFree(r,sizeof(*r));
+}
+// Experimental progressive AVC repair. Native stamps, mapping lifecycle,
+// coherency and scheduling stay native. Audit-only mode never edits commands.
 bool XE::wrapTGLVideoBatch(void *ring,uint64_t gpu,uint32_t stamp,uint32_t *cpu,uint32_t words,bool a,bool b) {
- // Exact donor VCS0 enum is 3, verified against the native hang report
- // and the ring/register engine bytes in the same captured submission.
- if(ring && static_cast<uint8_t *>(ring)[0x40]==3 && cpu && words>=21 && words<=262144 &&
-    tglVM.nofault && TGLHangPending::kernelRange(reinterpret_cast<uint64_t>(cpu),uint64_t(words)*4)) {
-  const size_t bytes=size_t(words)*4;
-  auto copy=static_cast<uint32_t *>(IOMalloc(bytes));
+ auto audit=tglBeginVideoAudit(ring,gpu,stamp,cpu,words);
+ const auto layout=tglVideoSixDWORDEnabled?TGLVideoMode::Layout::ReferenceAVCNV12SixDWORD:
+  TGLVideoMode::Layout::ObservedShort;
+ // Preserve the exact existing VCS0 and geometry gates for command edits.
+ if(tglVideoProgressiveEnabled && ring && static_cast<uint8_t *>(ring)[0x40]==3 && cpu && words>=21 && words<=262144 &&
+    tglVM.nofault && TGLHangPending::kernelRange(reinterpret_cast<uint64_t>(cpu),uint64_t(words)*4) &&
+    (!tglVideoSixDWORDEnabled || (audit && !audit->q[TGLVideoAudit::OwnerGuard] &&
+     audit->q[TGLVideoAudit::CopiedBefore]==uint64_t(words)*4 &&
+     audit->alias.q[TGLVideoAlias::BeforeQualified]))) {
+  const size_t bytes=size_t(words)*4;auto copy=static_cast<uint32_t *>(IOMalloc(bytes));
+  if(audit)audit->q[TGLVideoAudit::Disposition]=TGLVideoAudit::ReadFailed;
   if(copy) {
    if(tglVM.nofault(reinterpret_cast<uint64_t>(cpu),reinterpret_cast<uint64_t>(copy),bytes)==bytes) {
-    TGLVideoProgressive::Plan p;
-    if(TGLVideoProgressive::plan(copy,words,p)) {
-     // Revalidate all edit sites in the owned mapped command buffer first.
-     if(TGLVideoProgressive::apply(cpu,words,p))
-      IORegistryEntry::getRegistryRoot()->setProperty("TGLVideoProgressiveLastSlices",p.slices,32);
+    TGLVideoProgressive::Plan p;TGLVideoProgressive::Reason reason;
+    const bool planned=TGLVideoProgressive::plan(copy,words,p,&reason,layout);
+    if(audit){audit->q[TGLVideoAudit::PlanReason]=static_cast<uint32_t>(reason);audit->q[TGLVideoAudit::Disposition]=TGLVideoAudit::PlanRejected;}
+    if(planned) {
+     if(audit){audit->q[TGLVideoAudit::Edits]=p.count;audit->q[TGLVideoAudit::Slices]=p.slices;memcpy(audit->edits,p.edits,sizeof(p.edits));}
+     bool mapped=true;
+     if(tglVideoSixDWORDEnabled) {
+      mapped=tglVideoAliasFinish(*audit);
+      audit->alias.q[TGLVideoAlias::AtApplyAttempted]=1;
+      audit->alias.q[TGLVideoAlias::AtApplyStatus]=audit->alias.q[TGLVideoAlias::Status];
+     }
+     // A snapshot comparison and address observations do not pin a mapping.
+     const bool applied=mapped && (!tglVideoSixDWORDEnabled || !memcmp(cpu,copy,bytes)) &&
+      TGLVideoProgressive::apply(cpu,words,p);
+     if(audit)audit->q[TGLVideoAudit::Disposition]=!mapped?TGLVideoAudit::MappingRejected:
+      applied?TGLVideoAudit::Applied:TGLVideoAudit::ChangedBeforeApply;
+     if(applied)IORegistryEntry::getRegistryRoot()->setProperty("TGLVideoProgressiveLastSlices",p.slices,32);
     }
    }
    IOFree(copy,bytes);
   }
  }
+ // Separate opt-in format-only experiment. Require a complete VCS0 CPU receipt
+ // and stable CPU-visible CPU/GPU physical aliases. These are not mapping leases
+ // or a proof of resource lifetime, GPU TLB state or allocation generation.
+ // Recheck the source buffer before applying; this does not lock shared mappings.
+ // Native lifetime/coherency and submission return remain untouched.
+ if(tglVideoSurfaceEnabled && audit && audit->q[TGLVideoAudit::OwnerGuard]==0 &&
+    audit->q[TGLVideoAudit::Engine]==3 && audit->q[TGLVideoAudit::CopiedBefore]==uint64_t(words)*4 &&
+    words<=TGLVideoAudit::PrefixBytes/4 && audit->q[TGLVideoAudit::Edits]<=30) {
+  using namespace TGLVideoAudit;
+  const size_t bytes=size_t(words)*4;auto copy=static_cast<uint32_t *>(IOMalloc(bytes));
+  audit->q[SurfaceDisposition]=ReadFailed;
+  if(copy) {
+   if(tglVM.nofault(reinterpret_cast<uint64_t>(cpu),reinterpret_cast<uint64_t>(copy),bytes)==bytes) {
+    TGLVideoSurface::Plan p;TGLVideoSurface::Reason reason;
+    const bool planned=TGLVideoSurface::plan(copy,words,p,&reason,layout);
+    audit->q[SurfaceReason]=static_cast<uint32_t>(reason);audit->q[SurfaceDisposition]=PlanRejected;
+    if(planned) {
+     const bool mapped=tglVideoAliasFinish(*audit);
+     audit->alias.q[TGLVideoAlias::AtApplyAttempted]=1;
+     audit->alias.q[TGLVideoAlias::AtApplyStatus]=audit->alias.q[TGLVideoAlias::Status];
+     // Refuse stale bytes and failed address observations. No mapping is pinned.
+     const bool applied=mapped && !memcmp(cpu,copy,bytes) && TGLVideoSurface::apply(cpu,words,p);
+     audit->q[SurfaceDisposition]=!mapped?MappingRejected:applied?Applied:ChangedBeforeApply;
+     if(applied) {
+      const unsigned at=static_cast<unsigned>(audit->q[Edits]);
+      memcpy(audit->edits+at,p.edits,sizeof(p.edits));audit->q[Edits]+=p.count;
+      audit->q[Slices]=p.slices;
+     }
+    }
+   }
+   IOFree(copy,bytes);
+  }
+ }
+ tglFinishVideoAudit(audit,cpu);
  return FunctionCast(wrapTGLVideoBatch,callbackXE->orgTGLVideoBatch)(ring,gpu,stamp,cpu,words,a,b);
 }
 
 void XE::wrapTGLHangRingDump(void *ring,void *registers) {
+ // The pre-STOP wake observer is RCS-only. Native VCS hang reporting must
+ // also freeze these CPU receipts before reset and subsequent desktop work.
+ if(tglVideoAuditEnabled){tglVideoAudit.freeze();tglVideoVCSAudit.freeze();}
  // No new MMIO, remapping, forcewake or submission. Called by native hang
  // reporting before reset/retirement, never by a successful command path.
  struct Capture {

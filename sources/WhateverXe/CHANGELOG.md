@@ -6,6 +6,9 @@ Use the latest [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphi
 
 ### Added
 
+- Add opt-in, exact-device and donor-qualified AVC submission, address-alias, resource and event metadata diagnostics. Keep native submission and error returns intact.
+- Extend the guarded progressive command planner to complete single-slice frames and add separately enabled NV12 and six-DWORD command-layout experiments. Low-latency hardware encoding remains unresolved.
+
 - Add opt-in CPU-only mode-entry memory observations, preserving native mode programming and error returns.
 
 - Record the initiating display-resource failure once in the system log, including bounded per-pipe CPU state and stopped-memory refusal details.

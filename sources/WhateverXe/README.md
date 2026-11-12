@@ -112,6 +112,7 @@ MIPI DSI support is **experimental and tested only on GPD MicroPC 2 and CHUWI Mi
 - DisplayPort reconnection can cause black screens or freezes. Tiger Lake USB-C reconnection is also unreliable; Alder Lake-S DP output/reconnection can be slow.
 - Some image-conversion operations can crash applications; App Store video can freeze the GPU on Sequoia.
 - Safari video may occasionally drop frames. FairPlay-protected playback is unsupported.
+- Low-latency H.264 hardware encoding on the mobile Raptor Lake configuration remains unresolved and can hang.
 - Up to three displays are supported. Resolutions beyond the tested configurations and full system sleep/wake remain unverified.
 - With multiple firmware boot displays, eDP startup currently requires the internal panel to remain the primary boot display. Hardware validation of this eDP configuration is pending.
 - Some connector layouts and backlight methods, MST and Thunderbolt-managed outputs are unsupported.

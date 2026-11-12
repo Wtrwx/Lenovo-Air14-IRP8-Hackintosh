@@ -14,7 +14,7 @@ inline unsigned length(uint32_t h){
  if(h==0x12000002)return 4;
  switch(h){
  case 0x70000003:case 0x70010004:case 0x70020042:case 0x70030018:case 0x70040008:
- case 0x70800000:case 0x70810004:case 0x70820004:case 0x70830004:case 0x70840023:
+ case 0x70800000:case 0x70800004:case 0x70810004:case 0x70820004:case 0x70830004:case 0x70840023:
  case 0x7086003b:case 0x71000013:case 0x70850021:case 0x70070010:case 0x70080020:
  case 0x71030009:case 0x70870002:case 0x77800000:return (h&4095)+2;
  default:return (h&0xfffff000U)==0x70480000U ? (h&4095)+2 : 0;
@@ -36,7 +36,8 @@ void collect(Capture &c,const uint8_t *b,unsigned n,uint64_t base,uint64_t bb,Re
   const uint32_t h=TGLHangRefs::word(b+o);unsigned dw=length(h);if(!dw || dw>(n-o)/4){c.q[8]=3;return;}
   unsigned *target=nullptr;
   if(h==0x70020042)target=&mp;if(h==0x70840023)target=&vp;if(h==0x70030018)target=&ind;
-  if(h==0x70800000)target=&mode;if(h==0x71000013)target=&image;
+  // Structural recognition for failure-only reads, not command-edit admission.
+  if(h==0x70800000 || h==0x70800004)target=&mode;if(h==0x71000013)target=&image;
   if(target){if(*target!=n){c.q[8]=4;return;}*target=o;}
   if(h==0x71030009){if(TGLHangRefs::word(b+o+4)!=2){c.q[8]=5;return;}slice=o;}
   if(o==end)break;o+=dw*4;

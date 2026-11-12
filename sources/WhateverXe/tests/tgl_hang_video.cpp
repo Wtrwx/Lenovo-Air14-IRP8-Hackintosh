@@ -22,6 +22,19 @@ int main(){
  auto run=[&](const std::vector<uint32_t> &v,unsigned n){*c={};reads=0;TGLHangVideo::collect(*c,reinterpret_cast<const uint8_t *>(v.data()),n,0x40010000,0x40010000+active*4,read);};
  auto page=w;page.resize(1024);run(page,4096);assert(!c->q[8]&&reads==24);
  const auto saved=w;run(w,w.size()*4);assert(!c->q[8]&&reads==24&&c->q[6]==24&&w==saved);for(unsigned i=0;i<12;++i)assert(c->q[10+i]==w[loc[i]]);
+ // Six-DWORD mode shifts following resources, but does not change their roles.
+ // Header-looking extension words are payload and must not become duplicates.
+ {auto extended=w;extended[mode]=0x70800004;
+  extended.insert(extended.begin()+mode+2,{0x70800000,0x70800004,0,0});auto before=extended;
+  auto collectExtended=[&](const std::vector<uint32_t>&v,unsigned offset){*c={};reads=0;TGLHangVideo::collect(*c,reinterpret_cast<const uint8_t*>(v.data()),v.size()*4,0x40010000,0x40010000+offset*4,read);};
+  assert(length(0x70800004)==6);collectExtended(extended,active+4);
+  assert(!c->q[8]&&reads==24&&c->q[6]==24&&c->q[23]==0x82&&extended==before);
+  for(unsigned i=0;i<12;++i)assert(c->q[10+i]==w[loc[i]]);
+  auto duplicate=extended;duplicate.insert(duplicate.begin()+mode+6,{0x70800000,0x82});
+  collectExtended(duplicate,active+6);assert(c->q[8]==4&&reads==0);
+  auto headerOnly=w;headerOnly[mode]=0x70800004;
+  collectExtended(headerOnly,active);assert(c->q[8]&&reads==0);
+ }
  auto duplicate=w;duplicate[vp+10]=duplicate[mp+7];run(duplicate,duplicate.size()*4);assert(!c->q[8]&&reads==22);bool merged=false;for(unsigned i=0;i<c->q[6];++i)merged|=(c->pages[i].q[1]&((1<<2)|(1<<6)))==((1<<2)|(1<<6));assert(merged);
  auto cached=w;for(unsigned i:{4U,5U,8U})cached[loc[i]+2]|=4096;run(cached,cached.size()*4);assert(!c->q[8]&&reads==18&&c->q[24]==((1<<4)|(1<<5)|(1<<8)));
  hole=true;run(w,w.size()*4);assert(!c->q[8]&&reads==24&&c->pages[0].q[4]==1);hole=false;
