@@ -48,37 +48,20 @@ struct IO {
     }
 };
 int main() {
-    // Reproduce native enable-before-PIPECONF on eDP wake. The regular enable
-    // faults permanently; the panel adapter preserves HPD and real VBL re-arm.
-    for(bool hpdOnly:{false,true})for(unsigned ports:{1U,2U}) {
-        IO io;State s;
-        assert(enablePanel(io,s,0,0,ports)==Status::Complete && s.active==1);
-        io.r[0x70008]=0;
-        assert(disable(io,s)==Status::Complete);
-        if(hpdOnly)assert(hotplugOnly(io,s,true)==Status::Complete);
-        IO oldIO=io;State old=s;
-        assert(enable(oldIO,old,0,0,1,ports)==Status::Topology && old.faulted);
-        io.r[PipeIIR(0)]=1; // Pending status is preserved through idle wake.
-        assert(enablePanel(io,s,0,0,ports)==Status::Complete && s.enabled && !s.active && !s.faulted);
-        assert(io.r[PipeIIR(0)]==1);
-        io.writes.clear();
-        assert(enablePanel(io,s,0,0,ports)==Status::Complete && io.writes.empty());
-        io.r[0x70008]=0xC0000000;
-        assert(enablePanel(io,s,0,0,ports)==Status::Complete && s.active==1);
-        assert(vblank(io,s,0,true)==Status::Complete && (io.r[PipeIIR(0)+4]&1));
-        assert(enablePanel(io,s,0,0,ports)==Status::Complete && !s.faulted);
-    }
-    for(unsigned failure=0;failure<5;++failure) {
-        IO io;State s;assert(enablePanel(io,s,0,0,1)==Status::Complete);
-        assert(disable(io,s)==Status::Complete);io.r[0x70008]=0;
-        if(failure==0)io.wells=3;
-        if(failure==1)io.r[0x71008]=Enable;
-        if(failure==2)io.r[PipeIIR(0)+4]|=1U<<4,io.r[PipeIIR(0)-4]&=~(1U<<4);
-        if(failure==3)io.r[0x70008]=UINT32_MAX;
-        if(failure==4)s.faulted=true;
-        io.writes.clear();
-        assert(enablePanel(io,s,0,0,1)!=Status::Complete);
-        if(failure<3)assert(io.writes.empty());
+    // Cold wake erased both peer IRQ banks and HPD programming. Restore only
+    // actually restarted pipes, while re-enabling both selected connectors.
+    {IO io;State s;s.transcoders.dsi0Pipe=0;
+     io.r[0x70008]=0;io.r[0x7B008]=0xC0000000;io.r[0x6B400]=0x80000006;
+     io.r[0x71008]=0xC0000000;
+     assert(enable(io,s,0,NativeGT,3,0x18,0x18)==Status::Complete);
+     IO cold;cold.r[0x70008]=0;cold.r[0x7B008]=0xC0000000;cold.r[0x6B400]=0x80000006;
+     cold.r[DDIControl]=4;cold.r[HPDBank]=1; // unrelated masked TBT event
+     assert(restoreAfterPowerLoss(cold,s,7)==Status::Complete && s.active==1 && s.enabled);
+     assert((cold.r[NorthControl]&0x88)==0x88 && (cold.r[HPDBank+4]&0x30000)==0x30000);
+     assert(!(cold.r[HPDBank-4]&0x30000) && cold.r[HPDBank]==1);
+     assert((cold.r[DDIControl]&12)==4 && !(cold.r[PipeIIR(1)+4]&PipeOwned));
+     cold.r[0x71008]=0xC0000000;
+     assert(extendActivePipes(cold,s,7)==Status::Complete && s.active==3);
     }
     // DSI0 can feed A/B/C. IRQ/frame/plane banks follow the pipe, while
     // control/function come from DSI0. Keep external A active for B/C cases.

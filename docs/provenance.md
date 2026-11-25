@@ -1,25 +1,26 @@
 # 来源与修改范围
 
-显卡代码来源于 [b00t0x/WhateverXe](https://github.com/b00t0x/WhateverXe) 的 0.7.0 源码快照，原始许可与版权保留于 `sources/WhateverXe/LICENSE.txt`。本仓库不声称原创上游驱动，也没有上游 Git 历史；来源标注为版本快照，而非未经核实的 commit ID。
+显卡代码当前基于 [b00t0x/WhateverXe](https://github.com/b00t0x/WhateverXe) 的 `0.8.3` 源码快照（tag `0.8.3`，commit `f26a36880c49ea1063393d943527808c0f38feca`），搭配上游 [b00t0x/WhateverXe-Graphics](https://github.com/b00t0x/WhateverXe-Graphics) `v0.4.4`（commit `61c7cddda38d6a5d0057a01f402aab6efb612e13`，含 `AppleIntelTGLCompat 0.8.1`、`#47` Metal 内存修复、`#60` / `#96` VA 修复）；原始许可与版权保留于 `sources/WhateverXe/LICENSE.txt`。本仓库不声称原创上游驱动，也没有包含上游完整 Git 历史。
 
-本地修改主要包括：
+在 WhateverXe `0.8.3` 基础上，本机选择性保留与集成的修改主要包括：
 
-- 固件 VBT 的面板类型为 `0xff` 时，使用调用方提供的有效 EDID base block 做有界、唯一的 PNP 身份匹配。
-- 显式 `-wex-edp-hdmi-only` 策略保留通过固件准入的内屏和固定 HDMI；原 `-wex-edp-panel-only` 保留为恢复策略。
+- 显式 `-wex-edp-hdmi-only` 策略保留通过固件准入的内屏和固定 HDMI；原 `-wex-edp-panel-only` 保留为恢复策略（内部面板 EDID 识别则由 `0.8.3` 原生 OpRegion Mailbox 5 承接）。
 - HDMI 根据 EDID 能力调整源端时钟上限，通过 SCDC 协商 HDMI 2.0；为标准 SCDC 请求补充有界的真实 GMBUS 就绪轮询，修正 SDR 深度和颜色数据包配置。寄存器定义参考 Linux i915。
-- 保留符合条件的 eDP 固件 handoff 状态，区分内屏与外部接口的控制字段。
-- 接受 framebuffer 映射最后不足一整页的合法范围，并保留完整映射范围检查。
-- 内屏中断恢复与热插拔专用中断路径的修正。
-- 参照 Linux i915 的双像素时钟要求，修正 Display 13 watermark 的 donor 时钟单位换算，保留带宽、时序与实际读回保护。
-- 无当前显示路径的 watermark setup/update 和 DBUF 分配回调隔离，保留有效路径的资源失败保护。
-- 相应的独立 CPU/mock 回归检查及英日文说明。
+- 保留符合条件的 eDP 固件 `CTL2 bit3` handoff 状态，区分内屏与外部接口的控制字段。
+- 接受 framebuffer 映射最后不足一整页且满足 64 B 对齐的合法范围，并保留完整映射范围检查。
+- 结合上游 `0.8.3` 的掉电/唤醒恢复（`restoreAfterPowerLoss`、`deferRearm`、`finishDisplay13SystemWake`、`restoreGGTT`、`SystemSleepEvents`、`TGLRecovery`）补充停用游标、退场路径、`VBL path->fb` 校验与多输出电源释放保护。
+- 参照 Linux i915 的双像素时钟要求，修正 Display 13 watermark 的时钟单位换算，保留带宽、时序与实际读回保护，以适配内屏 120Hz 与外屏 144Hz。
+- 默认暂不合入/不开启实验性 `-wex-video-progressive-fix` 路径，以保持主基线可隔离验收；相应的独立 CPU/mock 回归检查均已同步至 `227` 项通过。
 
-`docs/graphics-source-sha256.json` 记录当前公开显卡源码的文件校验值。构建产物、开发依赖、上游发布工作流、本机日志和 Apple 驱动载荷未纳入源码快照。
+`docs/graphics-source-sha256.json` 记录当前公开显卡源码的 474 个文件校验值。构建产物、开发依赖、上游发布工作流、本机日志和 Apple 驱动载荷未纳入源码快照。
 
-ACPI 中的 PNLF、polling 触控板和亮度热键 SSDT、I2C 匹配注入器、EDID 校验工具及本仓库文档是 Air14 配套适配内容，按仓库 BSD-3-Clause 许可提供。它们不包含整机固件表或面板原始转储。
+`tools/` 中新增的可复现用户态工具按仓库 BSD-3-Clause 许可提供：
 
-当前时钟单位修正已完成 CPU 检查、构建及真实启动读回；这些检查不能替代持续稳定性验证。已知 GPU 挂起、界面卡顿与 WindowServer 内存增长保留为待解决问题。
+- `patch_tgl_vadriver_h264.py`：仅通过偏移验证和二进制补丁脚本输出针对 stock `WhateverXe-Graphics v0.4.4` 的 H.264 修复或软件回退包，仓库内不包含任何 Apple 二进制载荷。
+- `verify_vt_h264.mm` 与 `run_verify_vt_h264.py`：基于 macOS 公开 `VideoToolbox` / `CoreVideo` / `ImageIO` 框架的独立画质、码率与 H.264 Annex-B Slice QP 校验工具。
+- `patch_intelbtunified_ax211_fw.py`：依据 [laguillo/IntelBTUnified](https://github.com/laguillo/IntelBTUnified) (`v1.0.1`, GPL-3.0-only) 的 `_fwList` 结构，由用户本地自备的 `IntelBluetoothFirmware 2.5.3` 提取 AX211 较新固件替换对应槽位的工具脚本，仓库不分发两者的二进制 kext。
+- `make_hidpi_override.py` 与 `fix_panel_edid.py`：本地生成显示覆盖与校验修正 plist 的辅助脚本，包含 HiDPI/LoDPI 碰撞拒绝与数量预警。
 
-`sources/SMCProcessor` 基于 Acidanthera VirtualSMC 1.3.8 的 SMCProcessor 和公开 SDK，保留原许可、版权及上游文件校验值。新增仅针对物理 Intel family 6 model BA、同时具备核心与封装 DTS 能力的温度路径；不修改 Lilu 的共享 CPU 身份，也不构建或替换 VirtualSMC。该型号不启用未经验证的 RAPL、Voltage 或风扇接口。CPU 准入检查、Release 构建、温度负载变化和再次重启后的读数已验证；原始诊断继续保留在私人工作区。
+ACPI 中的 PNLF、polling 触控板和亮度热键 SSDT、I2C 匹配注入器及文档同样按仓库 BSD-3-Clause 许可提供，不包含整机固件表、SMBIOS 身份或面板原始转储。
 
-原生亮度键的 PS2K 通知和 RMCF 映射依据 [Acidanthera VoodooPS2](https://github.com/acidanthera/VoodooPS2) 的键盘通知处理及 ACPI 配置机制。SSDT 保留其他系统原有 EC 查询方法，通知方向按本机用户反馈修正，尚未完成修正后的重启验证。
+`sources/SMCProcessor` 基于 Acidanthera VirtualSMC 1.3.8 的 SMCProcessor 和公开 SDK，保留原许可、版权及上游文件校验值，仅启用 Intel family 6 model BA 的 DTS 温度路径。

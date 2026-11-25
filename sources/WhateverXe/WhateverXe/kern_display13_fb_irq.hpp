@@ -263,6 +263,35 @@ template<class IO> Status enable(IO &io,State &s,uint32_t excludedPCH=0,uint32_t
     if(!(io.read(Master)&Enable) || !(io.read(GfxMaster)&Enable))return fail(io,s,Status::Readback);
     s.enabled=true;return Status::Complete;
 }
+// Caller has proved total display power loss and restored its power/clock
+// dependencies. Cached armed banks no longer describe hardware. Reinstall
+// both pipe interrupts and connector detection, not just the live DSI bank.
+template<class IO> Status restoreAfterPowerLoss(IO &io,State &s,uint32_t allowed) {
+    if(!s.begun || s.faulted)return Status::Unavailable;
+    const auto actual=readActivePipes(io,allowed,s.transcoders);
+    if(actual.status!=Status::Complete)return actual.status;
+    io.write(Master,0);
+    if(io.read(Master)&Enable)return fail(io,s,Status::Readback);
+    s.enabled=false;s.active=0;
+    return enable(io,s,s.excludedPCH,NativeGT,actual.active,s.ports,s.typeC);
+}
+// A previously installed IRQ owner may be resumed before its pipe. Keep this
+// temporary absence distinct from enable()'s permanent topology/IRQ failures.
+// Reference: jkbuha/WhateverXe cf51935, resume rearm; native enablePipe arms VBL
+// after PIPECONF. The caller holds the IRQ lock and retries at that boundary.
+template<class IO> bool deferRearm(IO &io,const State &s,uint32_t admitted) {
+    if(!s.begun || s.faulted || !admitted || (admitted&~7U) || !s.transcoders.valid())return false;
+    const auto wells=io.read(Driver);
+    if(wells==UINT32_MAX || (wells&3)!=3)return false;
+    // Admission is a set of possible consumers, not a promise that every
+    // peer power well is currently on. Never read an unpowered bank.
+    for(unsigned p=0;p<3;++p)if(powered(wells,p)) {
+        const auto conf=Display13Transcoder::control(io,p,s.transcoders);
+        if(conf==UINT32_MAX || (conf&0xC0000000U))return false;
+    }
+    const auto actual=readActivePipes(io,admitted,s.transcoders);
+    return actual.status==Status::Topology && !actual.active;
+}
 template<class IO> Status disable(IO &io,State &s) {
     if(!s.begun || !io.readable(Master))return Status::Unavailable;
     io.write(Master,0);s.enabled=false;
@@ -427,22 +456,6 @@ template<class IO> Status hotplugOnly(IO &io,State &s,bool preservePipeStatus=fa
     s.active=0;io.write(Master,Enable);
     if(!(io.read(Master)&Enable))return fail(io,s,Status::Readback);
     s.enabled=true;return Status::Complete;
-}
-// Native eDP wake can enable interrupts before enablePipe starts PIPECONF.
-// Retain the existing hotplug-only state until the real VBL activation callback
-// arms pipe A. All stopped-consumer, powered-bank and IRQ ownership proofs stay
-// in hotplugOnly(); no new pipe is admitted here.
-// See https://github.com/b00t0x/WhateverXe/issues/22.
-template<class IO> Status enablePanel(IO &io,State &s,uint32_t excludedPCH,uint32_t sharedGT,uint32_t ports) {
-    if(s.begun && !s.faulted && s.transcoders.dsi0Pipe==UINT32_MAX &&
-       (ports==1 || ports==2) && ports==s.ports && !s.typeC &&
-       excludedPCH==s.excludedPCH && !(s.enabled && s.active)) {
-        if(!powered(io.read(Driver),0))return Status::Power;
-        const auto conf=Display13Transcoder::control(io,0,s.transcoders);
-        if(conf==UINT32_MAX)return fail(io,s,Status::Readback);
-        if(!(conf&Enable))return hotplugOnly(io,s,true);
-    }
-    return enable(io,s,excludedPCH,sharedGT,1,ports,0);
 }
 // The runtime supplies one mask to WM checks, this hardware proof and its
 // access block. Never silently derive a different DDI mapping inside the proof.

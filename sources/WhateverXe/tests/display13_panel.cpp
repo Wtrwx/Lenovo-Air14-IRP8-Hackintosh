@@ -22,20 +22,6 @@ int main() {
   auto &p=v.panel;p.valid=p.backlightValid=p.pwmPresent=true;p.ddi=ddi;p.backlightType=2;p.pwmHz=200;
   assert(PanelPower::nativePPS0(v,family));
   auto w=VBT::display13Fixed(v,0x7b,family);assert(w.panel==(1U<<ddi) && !w.dp && !w.hdmi);
-  for(unsigned external=0;external<16;++external) {
-   auto mixed=w;mixed.dp=external<<3;mixed.typeC=mixed.dp;
-   assert(mixed.described());
-   auto restricted=mixed.panelOnly();
-   assert(restricted.described() && restricted.panel==w.panel && restricted.selected()==w.panel);
-   assert(!Display13FBTopology::multiOutputWiring(restricted));
-   assert(!restricted.dp && !restricted.typeC && !restricted.hdmi);
-   for(unsigned d=0;d<7;++d)assert(!restricted.ddc[d]);
-  }
-  auto hdmi=w;hdmi.hdmi=1U<<(1-ddi);hdmi.ddc[1-ddi]=2;
-  assert(hdmi.described() && hdmi.panelOnly().selected()==w.panel);
-  auto badPolicy=w;badPolicy.dp=w.panel;assert(!badPolicy.panelOnly().described());
-  badPolicy=w;badPolicy.valid=false;assert(!badPolicy.panelOnly().described());
-  badPolicy=w;badPolicy.panel=0;assert(!badPolicy.panelOnly().described());
   alignas(8) uint8_t src[0x1c0]{},dst[0x1c0]{};src[0x12]=9;
   for(unsigned d=0;d<9;++d) {uint32_t c[]={d,d<3?d+1:d+6,1,d<3?0U:1U,0x400,0x201};memcpy(src+0x20+24*d,c,24);}
   const uint32_t panel[]={0,0,0,0,2,0x18};memcpy(src+0x20,panel,24);
@@ -47,11 +33,17 @@ int main() {
   for(unsigned bad=0;bad<10;++bad) {
    auto b=v;
    switch(bad) {case 0:b.panel.controller=1;break;case 1:b.panel.backlightType=3;break;
-    case 2:b.panel.pwmPresent=false;break;case 3:b.unmapped=1;break;case 4:b.panel.valid=false;break;
+    case 2:b.panel.backlightValid=false;break;case 3:b.unmapped=1;break;case 4:b.panel.valid=false;break;
     case 5:b.port[ddi].flags=4;break;case 6:b.port[ddi].capabilities=1;break;
     case 7:b.port[ddi].aux=0x90;break;case 8:b.present|=1U<<(1-ddi);b.port[1-ddi]=b.port[ddi];break;
     case 9:b.panel.ddi=2;break;}
    assert(!PanelPower::nativePPS0(b,family));assert(!VBT::display13Fixed(b,0x7b,family).panel);
+  }
+  for(unsigned type:{2U,5U}) {
+   auto aux=v;aux.panel.backlightType=type;aux.panel.pwmPresent=false;
+   assert(!PanelPower::nativePPS0(aux,family)); // PWM-only callers stay unchanged.
+   assert(PanelPower::nativePPS0(aux,family,true));
+   assert(VBT::display13Fixed(aux,0x7b,family).panel==(1U<<ddi));
   }
   auto overlap=w;overlap.dp=w.panel;assert(!overlap.described());overlap=w;overlap.panel=3;assert(!overlap.described());
   ProbeBinding binding;binding.controller=1;binding.access=2;binding.platform=reinterpret_cast<uintptr_t>(dst);

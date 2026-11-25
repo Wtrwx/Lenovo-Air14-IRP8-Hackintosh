@@ -4,6 +4,10 @@
 #define KERN_XELP_GEOMETRY_HPP
 #include <stdint.h>
 namespace XELPGeometry {
+// Linux v6.12 TRANS_DDI_BPC encodes 8/10/6/12 bpc as 0/1/2/3.
+// Link depth is independent of the four-byte RGB plane. Bootstrap preserves
+// that firmware link; changing the plane's addressing does not change BPC.
+inline bool rgbLinkDepth(uint32_t trans) {return ((trans>>20)&7)<=3;}
 struct Linear {uint32_t width {},height {},pitch {};uint64_t bytes {};bool valid {};};
 inline Linear linear(uint32_t control,uint32_t stride,uint32_t size,uint32_t position,uint32_t offset) {
     Linear r;
@@ -14,6 +18,12 @@ inline Linear linear(uint32_t control,uint32_t stride,uint32_t size,uint32_t pos
     r.width=(size&8191)+1;r.height=((size>>16)&8191)+1;r.pitch=stride*64;
     if(r.pitch<r.width*4)return {};
     r.bytes=(uint64_t(r.pitch)*r.height+4095)&~4095ULL;r.valid=true;return r;
+}
+// A smaller firmware plane can remain unscaled in a full native pipe canvas.
+inline bool insideCanvas(const Linear &g,uint32_t ht,uint32_t vt,uint32_t source) {
+    return g.valid && ht!=UINT32_MAX && vt!=UINT32_MAX &&
+        source==(((ht&0x3fff)<<16)|(vt&0x3fff)) &&
+        g.width<=(ht&0x3fff)+1 && g.height<=(vt&0x3fff)+1;
 }
 inline bool timing(const Linear &r,uint32_t ht,uint32_t vt) {
     return r.valid && ht!=UINT32_MAX && vt!=UINT32_MAX && !(ht&0xC000C000) && !(vt&0xC000C000) &&

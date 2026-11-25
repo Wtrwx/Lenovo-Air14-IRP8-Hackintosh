@@ -1,35 +1,62 @@
 # Changelog
 
+## 0.8.3
+
+### Added
+
+- Add experimental VESA AUX brightness control for internal eDP on Alder Lake and Raptor Lake. Hardware validation on internal panels is pending.
+
+### Fixed
+
+- Improve experimental internal eDP support on Alder Lake and Raptor Lake at startup and after display sleep.
+- Fix a GPU recovery failure that could stall a normal restart after a graphics hang.
+
+## 0.8.2
+
+Update WhateverXe and [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphics/releases) together.
+
+### Fixed
+
+- Fix a regression introduced in 0.8.1 that could leave displays black after macOS starts.
+
+### Added in 0.8.1
+
+- Add experimental 10-bit framebuffer support for the supported MIPI DSI panels.
+
+### Fixes from 0.8.1
+
+- Preserve firmware display output when only one of the two graphics components is installed.
+- Correct missing or duplicate display wake notifications after system sleep.
+- Fix graphics memory mapping at buffer boundaries.
+
+## 0.8.0
+
+Use the latest [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphics/releases) package with this update.
+
+### Added
+
+- Add Raptor Lake-U graphics support.
+- Add experimental system sleep/wake support, tested on MIPI DSI laptop configurations with Big Sur and Tahoe and model-specific ACPI settings.
+- Add an optional 60 Hz mode for matching MIPI DSI panels in MiniBook X N100 and U300.
+
+### Fixed
+
+- Fix a regression introduced in 0.7.0 that disabled graphics acceleration on some supported Tiger Lake configurations.
+- Fix restart and shutdown with the supported MIPI DSI panels, and accelerated startup with USB-C displays already connected.
+- Fix rotated MIPI DSI display-mode selection and improve display restoration after sleep.
+- Improve compatibility with supported macOS updates when kernel or system-driver code placement changes.
+
 ## 0.7.0
 
 Use the latest [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphics/releases) package with this update.
 
 ### Added
 
-- Add opt-in, exact-device and donor-qualified AVC submission, address-alias, resource and event metadata diagnostics. Keep native submission and error returns intact.
-- Extend the guarded progressive command planner to complete single-slice frames and add separately enabled NV12 and six-DWORD command-layout experiments. Low-latency hardware encoding remains unresolved.
-
-- Add opt-in CPU-only mode-entry memory observations, preserving native mode programming and error returns.
-
-- Record the initiating display-resource failure once in the system log, including bounded per-pipe CPU state and stopped-memory refusal details.
-
-- Add CPU-only failure details for guarded display-path association checks without changing teardown admission.
-- Add an optional internal-eDP-only policy for Alder Lake-N / Twin Lake and mobile Alder/Raptor Lake boards; external display outputs are disabled when selected.
-- Add an optional eDP and fixed Combo HDMI policy for the same boards, retaining qualified firmware routes while excluding DisplayPort and Type-C outputs.
 - Add USB-C DisplayPort Alt Mode output on Alder Lake-class GPUs, including multi-display startup and reconnection.
 - Add experimental MIPI DSI display support with graphics acceleration, brightness control, display off/on, rotation, HiDPI and external-display coexistence. Tested on GPD MicroPC 2 and CHUWI MiniBook X N100 only; do not expect it to work on other devices. System sleep/wake remains unsupported.
 
 ### Fixed
 
-- Preserve native scaled logical buffers while retiring already-published stopped display paths; keep allocation and backing validation strict.
-
-- Stop a lingering cursor on a qualified external display path before its final DDI power release, preserving peer displays and rejecting active timing, planes or pending native work.
-- Allow stopped external display paths to release their last power reference despite an unlatched watermark token, while retaining hardware-stop, interrupt-drain and active-programming checks.
-- Ignore VBL callbacks from detached or foreign display paths before global IRQ state changes; preserve real failures for valid display owners.
-- Reject buffer-allocation and watermark setup/update callbacks without a current display-path owner before changing active plans or global fault state; retain strict fault handling for invalid inputs on an owned path.
-- Allow firmware multi-display startup to retain a qualified internal eDP primary display while retiring external boot scanouts, preserving panel sequencing and source-state checks.
-- Correct Display 13 watermark bandwidth admission for uncompressed RGB scanout by converting the donor clock ABI to physical CDCLK before applying the two-pixels-per-clock requirement. Preserve timing, cursor, register-readback and live-surface checks. This does not resolve the separate intermittent GPU render hang.
-- Accept partial final pages in framebuffer aperture surfaces while validating the full mapped extent, and preserve hotplug-only interrupts during internal eDP display wake. Based on the [eDP report and fixes](https://github.com/b00t0x/WhateverXe/issues/22).
 - Fix graphics initialization and acceleration on additional supported Tiger Lake and Alder/Raptor Lake GPU variants, including single-channel configurations.
 - Fix graphics initialization on compatible Sequoia and Tahoe updates without requiring an exact OS build match.
 - Fix display freezes during cursor resizing and improve multi-display startup and display off/on with MIPI DSI panels.

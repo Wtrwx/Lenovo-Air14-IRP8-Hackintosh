@@ -52,12 +52,18 @@ static void testDSIBacking() {
             auto i=f.registers.find(reg);if(i==f.registers.end())return false;v=i->second;return true;
         },38400);
     };
-    const auto inspect=[](Fixture &f,const XELP::DSI::Readout &source) {
+    const auto inspect=[](Fixture &f,const XELP::DSI::Readout &source,uint32_t cropped=0) {
         return Display13FBMemory::inspect(f,f.controller,sizeof(f.controller),f.framebuffer,sizeof(f.framebuffer),
-            0x10000000,memory,true,0,0,nullptr,nullptr,false,&source);
+            0x10000000,memory,true,0,0,nullptr,nullptr,false,&source,cropped);
     };
     Fixture good;const auto source=setup(good);assert(source.complete());
     auto result=inspect(good,source);assert(result.status==Status::Complete && result.verifiedPages==good.ptes.size());
+    for(bool drift:{false,true}) {
+        Fixture crop;setup(crop);crop.registers[0x70190]=0x04370437;
+        crop.registers[0x6001C]=0x0437077F;crop.registers[0x68180]=crop.registers[0x68280]=0;
+        if(drift)crop.changeRegister=0x6001C;
+        assert(inspect(crop,source,0x04370437).status==(drift?Status::StateChanged:Status::Complete));
+    }
     // The GOP has global DPT enabled, but its linear plane still addresses GGTT.
     // No acceptance of tiled/rotated geometry or a shortened pool follows.
     for(auto pair:std::map<uint32_t,uint32_t>{{0x70180,0x94000408},{0x70188,67},
@@ -333,6 +339,34 @@ int main() {
     Fixture overlapsGTT;put(overlapsGTT.controller,0x1A30,uint32_t(0x06000000));put(overlapsGTT.controller,0x1A34,uint32_t(0x6000));
     assert(overlapsGTT.inspect().status==Status::PoolRange && !overlapsGTT.reads);
     Fixture wrongBacking;put(wrongBacking.controller,0x1A28,uint64_t(0x7A801000));assert(wrongBacking.inspect().status==Status::PoolRange);
+    for(unsigned depth=0;depth<8;++depth) {
+        Fixture f;f.registers[0x60400]|=depth<<20;
+        const auto r=f.inspect();
+        assert(r.status==(depth<4?Status::Complete:Status::DisplayState));
+        assert(f.reads==(depth<4?f.ptes.size():0));
+    }
+    // Actual eDP snapshot -> backing inspector; depth is output encoding,
+    // while the source plane and GGTT pages remain four-byte RGB8.
+    for(unsigned ddi:{0U,1U})for(unsigned depth=0;depth<8;++depth)for(bool drift:{false,true}) {
+        Fixture f;
+        const std::map<uint32_t,uint32_t> source {
+            {0x45454,3U<<(2*ddi)},{0x45444,1U<<(2*ddi)},{0x42000,0x8e380000},
+            {0x60400,0x82030006|((ddi+1)<<27)|(depth<<20)},{0x60404,0},
+            {0x60540,0x80040340},{0x64000+ddi*0x100,0x80000006},{0x46140,(ddi+1)<<28},
+            {0x60030,0x7e100000},{0x60034,0x800000},{0x60040,0x100000},{0x60044,0x800000},
+            {0x78000,0},{0x78004,0}};
+        for(auto item:source)f.registers[item.first]=item.second;
+        struct SnapshotIO {
+            Fixture &f;bool readable(uint32_t r){return f.readable(r);}
+            uint32_t read(uint32_t r){return f.registers[r];}
+        } io {f};
+        const auto boot=AlderLakeN::readDisplay(io,true);
+        if(drift)f.changeRegister=0x60400;
+        const auto r=Display13FBMemory::inspect(f,f.controller,sizeof(f.controller),f.framebuffer,
+            sizeof(f.framebuffer),0x10000000,memory,true,0,ddi,nullptr,&boot,true);
+        assert(r.status==(depth<4?(drift?Status::StateChanged:Status::Complete):Status::DisplayState));
+        assert(f.reads==(depth<4?f.ptes.size():0));
+    }
     Fixture noDPTDisable;noDPTDisable.registers[0x42084]=0;assert(noDPTDisable.inspect().status==Status::DisplayState);
     Fixture unpowered;unpowered.registers[0x45404]=3;assert(unpowered.inspect().status==Status::DisplayState && !unpowered.reads);
     Fixture tiled;tiled.registers[0x70180]|=1U<<10;assert(tiled.inspect().status==Status::DisplayState);

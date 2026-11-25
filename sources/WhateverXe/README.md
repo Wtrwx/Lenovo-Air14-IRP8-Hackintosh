@@ -3,9 +3,6 @@
 [日本語](README_ja.md)
 
 WhateverXe is a Lilu plugin, derived from WhateverGreen, that adapts Apple graphics drivers for selected Intel Xe-LP integrated GPUs.
-
-This snapshot includes experimental Lenovo Air14 IRP8 adaptations with internal-panel Metal, brightness, HiDPI and 120Hz operation. GPU render hangs and interface stalls remain unresolved. See the [project README](../../README.md) for this board's validation scope and limitations. The broader hardware coverage below is inherited from upstream.
-
 Use the latest releases of [WhateverXe](https://github.com/b00t0x/WhateverXe/releases) and [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphics/releases) together. See [CHANGELOG](CHANGELOG.md) for release notes.
 
 ## Compatibility
@@ -28,6 +25,7 @@ Sequoia and Tahoe accept compatible updates within their OS family. Future Apple
 - Twin Lake: 32-EU configurations.
 - Alder Lake-H: 96-EU configurations, including single-channel operation.
 - Alder Lake-S: UHD Graphics 770.
+- Raptor Lake-U: 48-EU configurations.
 
 See [tested features and known issues](#tested-features-and-known-issues) for OS coverage and display configurations. PCI IDs are listed in [device selection](docs/device-selection.md).
 
@@ -35,13 +33,12 @@ See [tested features and known issues](#tested-features-and-known-issues) for OS
 
 - Other supported Tiger Lake-U/H35 configurations, including 96 EU, and Tiger Lake-H45.
 - Other supported Alder Lake-N / Twin Lake configurations.
-- Other supported Alder Lake-H/P/U and Raptor Lake-H/P configurations.
+- Other supported Alder Lake-H/P/U and Raptor Lake-H/P/U configurations.
 - Other supported Alder Lake-S/HX and Raptor Lake-S/HX configurations.
-- Internal eDP on Alder Lake-N / Twin Lake and Alder Lake-H/P/U / Raptor Lake-H/P is implemented but has not been tested on hardware.
+- Internal eDP on Alder Lake-N / Twin Lake and Alder Lake-H/P/U / Raptor Lake-H/P/U is implemented but has not been tested on hardware. Brightness supports PCH PWM and standard VESA AUX; panel-specific OLED/Intel HDR brightness remains unqualified.
 
 ### Further implementation required
 
-- Raptor Lake-U: dedicated display-clock handling is not implemented.
 - Rocket Lake-S: display control requires additional support.
 
 ### No support planned
@@ -51,13 +48,13 @@ See [tested features and known issues](#tested-features-and-known-issues) for OS
 
 ## Installation
 
-1. Add Lilu, `WhateverXe.kext` and [AMFIPass 1.4.1 Mod](https://github.com/b00t0x/WhateverXe-Graphics/blob/main/extras/AMFIPass-v1.4.1-Mod-RELEASE.zip) to OpenCore, with WEX after Lilu. Use the WEX **RELEASE** ZIP; DEBUG is for troubleshooting.
+1. Add Lilu 1.7.2 or later and `WhateverXe.kext` from the **RELEASE** ZIP to OpenCore, with WEX after Lilu. Install [AMFIAnchor](https://github.com/b00t0x/AMFIAnchor/releases/latest) and [`AMFIAnchorInjector.kext`](https://github.com/b00t0x/AMFIAnchor/tree/main/Injectors) as described in the [OpenCore instructions](https://github.com/b00t0x/AMFIAnchor/blob/main/README.md#install-with-opencore).
 2. Set `csr-active-config=03080000` (`0x803`) and apply the [configuration](#configuration).
 3. Boot the target macOS, install the latest [WhateverXe Graphics pkg](https://github.com/b00t0x/WhateverXe-Graphics/releases), then restart. [Package installation and removal](https://github.com/b00t0x/WhateverXe-Graphics#install).
 
-Use the linked **Mod** AMFIPass instead of upstream AMFIPass; do not load both. WhateverGreen and WhateverXe must not be enabled together. `amfi=0x80` and `ipc_control_port_options=0` are unnecessary.
+If upgrading from AMFIPass 1.4.1 Mod, remove its OpenCore entry. Keep AMFI enabled. WhateverGreen and WhateverXe must not be enabled together. `amfi=0x80` and `ipc_control_port_options=0` are unnecessary.
 
-Graphics installs under `/Library` and rebuilds AuxKC without patching System files or snapshots. Restore an old Xe System patch before installing. If you need OCLP for other root patches, use the [custom OCLP build](https://github.com/b00t0x/OpenCore-Legacy-Patcher) with the matching Mod signing chain.
+Graphics installs under `/Library` and rebuilds AuxKC without patching System files or snapshots. Restore an old Xe System patch before installing. If you use [OCLP](https://github.com/dortania/OpenCore-Legacy-Patcher) for other root patches, load OCLP's AMFIPass after AMFIAnchor and its injector.
 
 ## Configuration
 
@@ -85,43 +82,38 @@ These settings are unnecessary at 96MB and do not increase firmware-allocated me
 
 - Add `SSDT-PNLF` for internal-display brightness control.
 - GPU selection is automatic; a `device-id` override is normally unnecessary.
-- Firmware-selected internal panels can use a verified EDID for [panel identity selection](docs/device-selection.md#firmware-selected-internal-panel).
-- On Alder Lake-N / Twin Lake and Alder Lake-H/P/U / Raptor Lake-H/P, `-wex-edp-panel-only` restricts a qualified eDP board to its internal panel and disables all external display outputs.
-- On the same GPUs, `-wex-edp-hdmi-only` retains a qualified eDP panel and fixed Combo HDMI outputs while disabling DisplayPort and Type-C display routes. It requires valid firmware routing for both outputs. The internal-panel-only setting takes precedence if both are present.
-- Alder Lake-N / Twin Lake and Alder Lake-H/P/U / Raptor Lake-H/P select tiling automatically. Do not use `-yTileDisable`; `AAPL,GfxYTile` is unnecessary.
+- Alder Lake-N / Twin Lake and Alder Lake-H/P/U / Raptor Lake-H/P/U select tiling automatically. Do not use `-yTileDisable`; `AAPL,GfxYTile` is unnecessary.
 
 ## Tested features and known issues
 
 The common regression checks cover Metal, OpenGL, OpenCL, hardware H.264 encode/decode and HEVC decode. The table summarizes OS coverage and configuration-specific display features.
-
-Standalone framebuffer tests also check that rejected display-path callbacks leave active watermark plans and unrelated display interrupts intact, and that external-path power release retires only owned cursors after timing and other hardware consumers stop and interrupts drain; they also cover retirement while a scaled logical buffer remains under native ownership. These CPU checks do not establish hardware sleep/wake or restart reliability.
 
 | Configuration | Verified coverage |
 | --- | --- |
 | Tiger Lake mini PCs | Big Sur–Tahoe: 80 EU, two 1080p60 displays, display off/on, Safari video and Widevine |
 | Tiger Lake laptops | Big Sur–Tahoe: 48 EU, internal eDP and brightness, HDMI/USB-C, up to three displays and display off/on |
 | Alder Lake-N mini PCs | Big Sur–Tahoe: 16/24 EU, two 1080p60 HDMI displays and display off/on |
-| Alder Lake-N / Twin Lake laptops | MIPI DSI on MicroPC 2 (N250) and MiniBook X N100. Big Sur: brightness, rotation, display off/on and external HDMI/USB-C coexistence; MicroPC 2 also has HiDPI and up to three displays. Tahoe: MicroPC 2 internal/external displays, brightness, rotation and HiDPI |
+| Alder Lake-N / Twin Lake laptops | MicroPC 2 and MiniBook X N100 on Big Sur/Tahoe: MIPI DSI, brightness, rotation, display off/on and HDMI/USB-C coexistence. MicroPC 2: HiDPI and up to three displays; MiniBook X N100: optional 60 Hz |
+| Raptor Lake-U laptop | MiniBook X U300 on Big Sur/Tahoe: internal MIPI DSI, brightness, rotation, HiDPI and up to two USB-C displays. Internal panel: 50 Hz; optional 60 Hz also tested on Big Sur |
 | Alder Lake-H | Big Sur–Tahoe: 96 EU, three displays using HDMI and a DP-to-HDMI adapter. Single-channel `4626` graphics acceleration checked on Big Sur |
 | Alder Lake-S | Big Sur–Tahoe: UHD 770, HDMI/DP/USB-C and up to three displays; Safari video, with Widevine checked on Big Sur/Tahoe |
 
-MIPI DSI support is **experimental and tested only on GPD MicroPC 2 and CHUWI MiniBook X N100**. Do not expect it to work on other devices.
+MIPI DSI support is **experimental**, limited to the tested GPD MicroPC 2 and CHUWI MiniBook X N100/U300 panels. Do not expect it to work on other devices.
+
+System sleep/wake support is **experimental**. Tested configurations are MiniBook X N100/U300 (MIPI DSI) on Big Sur and Tahoe with model-specific ACPI settings, using the internal display alone or up to two external displays. Other models, OS versions and prolonged DarkWake cycles remain unverified.
 
 ### Known issues and limits
 
 - DisplayPort reconnection can cause black screens or freezes. Tiger Lake USB-C reconnection is also unreliable; Alder Lake-S DP output/reconnection can be slow.
-- Some image-conversion operations can crash applications; App Store video can freeze the GPU on Sequoia.
+- Some image-conversion operations can crash applications.
 - Safari video may occasionally drop frames. FairPlay-protected playback is unsupported.
-- Low-latency H.264 hardware encoding on the mobile Raptor Lake configuration remains unresolved and can hang.
-- Up to three displays are supported. Resolutions beyond the tested configurations and full system sleep/wake remain unverified.
-- With multiple firmware boot displays, eDP startup currently requires the internal panel to remain the primary boot display. Hardware validation of this eDP configuration is pending.
+- Up to three displays are supported. Resolutions beyond the tested configurations remain unverified.
 - Some connector layouts and backlight methods, MST and Thunderbolt-managed outputs are unsupported.
 
 ### Roadmap
 
-- Implement Raptor Lake-U display-clock support.
-- Complete DisplayPort, USB-C and internal-display support on Alder Lake-N / Twin Lake and Alder Lake-H/P/U / Raptor Lake-H/P.
-- Improve display reconnection reliability and investigate full system sleep/wake.
+- Complete DisplayPort, USB-C and internal-display support on Alder Lake-N / Twin Lake and Alder Lake-H/P/U / Raptor Lake-H/P/U.
+- Improve display reconnection reliability and extend system sleep/wake coverage.
 
 ## Build and test
 
@@ -142,3 +134,9 @@ See [LICENSE.txt](LICENSE.txt). Lilu and MacKernelSDK are separate dependencies.
 Thanks to [JulioNectar/XPS13Plus](https://github.com/JulioNectar/Hackintosh-XPS13Plus-IrisXe-Tahoe) for sharing its Xe graphics work. Its compiler adapter and LLVM bridge informed the OS-native AIR conversion used in WhateverXe Graphics.
 
 Internal-panel work also draws on [WhateverXe-RaptorLakeP](https://github.com/samranahmad09/WhateverXe-RaptorLakeP), [X1Carbon-G11](https://github.com/dssoftx/Hackintosh-X1Carbon-G11-IrisXe-Tahoe), XPS13Plus and the [Linux i915 display sources](https://github.com/torvalds/linux/tree/v6.12/drivers/gpu/drm/i915/display) for hardware behavior and implementation comparisons.
+
+eDP boot-handoff and startup corrections also reference the reports and patches from [ann0see](https://github.com/ann0see/WhateverXe/tree/522c0a1bd60b9beac66e00dfd7414823680639dd), [belugaa-01](https://github.com/belugaa-01/WhateverXe-Patched), [Thatisjigen](https://github.com/Thatisjigen/WhateverXe), and [zsz-of](https://github.com/zsz-of/WhateverXe).
+
+The optional MiniBook X 60 Hz panel timing also draws on the [minibookx-ctl display guide](https://github.com/ishad0w/minibookx-ctl/blob/main/docs/guide/display.md).
+
+Display wake rearming and GGTT restoration were informed by [jkbuha/WhateverXe](https://github.com/jkbuha/WhateverXe). The AUX brightness investigation also referenced [JulioNectar](https://github.com/JulioNectar/Hackintosh-XPS13Plus-IrisXe-Tahoe); the VESA implementation uses protocol facts from Linux DRM, without copying NootedGreen code.

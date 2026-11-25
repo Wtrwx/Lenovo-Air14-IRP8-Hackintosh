@@ -286,6 +286,9 @@ inline TriggerSurfaces triggerSurfaces(const TriggerPacket *packets,uint32_t cou
 // These linear RGB/cursor WM and PIPE_WM_LINETIME equations do not consume
 // CDCLK. An unchanged hardware-verified plan is valid at another clock when
 // every consumer still fits its bandwidth. A clock request alone is no proof.
+// These linear RGB/cursor WM and PIPE_WM_LINETIME equations do not consume
+// CDCLK. An unchanged hardware-verified plan is valid at another clock when
+// every consumer still fits its bandwidth. A clock request alone is no proof.
 // Linux v6.12 intel_pixel_rate_to_cdclk and icl_plane_min_cdclk require
 // ceil(pixel_rate / 2) physical CDCLK for this two-pixels-per-clock path.
 // Display13Clock::nativeHz() is the donor ABI: twice physical CDCLK in Hz.

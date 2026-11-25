@@ -1,7 +1,6 @@
 {
-  "-wex-edp-panel-only": [],
-  "-wex-edp-hdmi-only": [],
   "-wex-dsi-audit": [],
+  "-wex-dsi-60hz": [],
   "-wex-dsi-adopt": [],
   "-wex-dsi-panel-only": [],
   "-wex-dsi-command-test": [],
@@ -150,12 +149,7 @@
   "-wex-display13-offline": [],
   "-wex-dsi-hdmi-test": [],
   "-wex-dsi-power-test": [],
-  "-wex-video-progressive-fix": [],
-  "-wex-video-vcs-diagnostic": [],
-  "-wex-wake-memory-observe": [],
-  "-wex-video-submit-audit": [],
-  "-wex-video-nv12-format": [],
-  "-wex-video-vdenc-six-dword": [],
-  "-wex-video-submit-metadata": [],
-  "-wex-video-event-metadata": []
+  "-wex-edp-panel-only": [],
+  "-wex-edp-hdmi-only": [],
+  "-wex-wake-memory-observe": []
 }

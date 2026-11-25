@@ -186,11 +186,6 @@ int main(int argc,char **argv){
   assert(!XE::wrapDisplay13EnablePort(f.port));assert(!XE::wrapDisplay13DisablePort(f.port));assert(objectRefs.empty());
   display13FBPower.panelFaulted=true;assert(!XE::display13SSTPort(f.port));
  }
- // Boot handoff can precede native setPortMode: Combo mode0 is unset,
- // mode1 is eDP; TC modes must never be admitted on a Combo port.
- {Fixture f(0,0,0);Map map;setup(f,map,0,0,4,20,true);
-  for(unsigned mode=0;mode<6;++mode){put(f.port,0x550,mode);assert(bool(XE::display13SSTPort(f.port))==(mode<=1));}
- }
  unsigned count=0,replays=0;
  for(unsigned ddi=0;ddi<2;++ddi)for(unsigned pipe=0;pipe<3;++pipe)for(unsigned lanes:{1U,2U,4U})
  for(unsigned rate:{6U,10U,20U,30U})for(unsigned swing=0;swing<4;++swing)for(unsigned emphasis=0;emphasis<4-swing;++emphasis){
