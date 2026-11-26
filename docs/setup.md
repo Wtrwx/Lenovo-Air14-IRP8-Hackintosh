@@ -1,5 +1,7 @@
 # 构建与配置
 
+匹配 Air14 IRP8、i5-1340P、AX211 与 Tahoe 25G332 的机器可从 GitHub Releases 下载预编译 EFI。[EFI 下载与安装](efi-release.md)
+
 ## 显卡源码（WhateverXe 0.8.3-air14 + Graphics v0.4.4）
 
 `sources/WhateverXe` 保留基于 WhateverXe `0.8.3` 的源码、独立 CPU/mock 测试、睡眠唤醒/掉电恢复机制及本机适配修改。源目录中的英日 README 说明通用组件与要求；本仓库首页和已知问题描述 Air14 的实际验证范围。
@@ -47,7 +49,13 @@ clang++ -std=c++17 -O2 -Wall -Wextra -fobjc-arc \
 python3 tools/run_verify_vt_h264.py --tool ./build/verify_vt_h264 --out ./build/vt-report
 ```
 
-## 蓝牙（IntelBTUnified + AX211 固件注入）
+## 隔空投送与蓝牙
+
+当前发布使用 `ForbiddenItlwm 0.7.0-alpha.4` 的 Tahoe 版。按 `Lilu → IntelBluetoothFirmware → BlueToolFixup → BTLEAdvFixup → ForbiddenItlwm` 加载，启动参数含 `-btleadv`。使用本机自己的 `PlatformInfo → Generic`，并开启 `PlatformInfo → UpdateNVRAM`。合并配置时停用 `AirportItlwm`、`itlwm`、`IntelBTPatcher` 和 `IntelBTUnified`。[上游安装说明](https://github.com/retropineaple/ForbiddenItlwm/blob/v0.7.0-alpha.4/docs/INSTALL.md)
+
+### 旧版蓝牙回退（IntelBTUnified）
+
+`IntelBTUnified` 是独立配置。应用旧版蓝牙回退时，应同时恢复配套的 `AirportItlwm` 配置。
 
 在 macOS Tahoe 上，使用 `BlueToolFixup` 对 `/usr/sbin/bluetoothd` 打内存补丁在 APFS 压缩页重读时会导致页签名异常与 `SIGBUS` 反复崩溃。可改用 [IntelBTUnified](https://github.com/laguillo/IntelBTUnified) `v1.0.1`（替代 `IntelBluetoothFirmware` + `IntelBTPatcher` + `BlueToolFixup`）通过 `_vnode_pagein` 规避页签名崩溃。
 

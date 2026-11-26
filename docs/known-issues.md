@@ -15,9 +15,9 @@
 
 ## 外设与系统稳定性
 
-- **蓝牙（已解决崩溃循环，长睡眠与音频待续）**：从 `BlueToolFixup + IntelBluetoothFirmware/Patcher 2.5.3` 切换为 `IntelBTUnified 1.0.1` + 注入 `2026-01-28` AX211 固件后，`bluetoothd` APFS 页签名 `SIGBUS` 与 `OI_HCICMD_LE_Read_BufferSize_V2` 初始化崩溃已消除，系统可稳定挂起/连接键鼠设备；A2DP/HFP 音频并发与多轮长睡眠后回连仍在继续观察。
+- **隔空投送与蓝牙**。AX211 空投已在 25G332 完成一次发送和一次接收。长时间运行、较大文件、多轮长睡眠后的回连和 A2DP/HFP 音频并发仍待验证。旧版 `IntelBTUnified` 可作为独立蓝牙回退配置。[实机记录](status-2026-11-26.md)
 - **声卡与麦克风**：声卡尚无可用的 CoreAudio 成熟输出方案；Intel SST 数字麦克风不能仅靠常规 AppleALC 适配。
 - **原生长时间日志写盘压力**：若系统存在遗留诊断过滤或高频 `SkyLight` Signpost 持久化，叠加双屏高刷可能引发 `logd` watchdog 超时；见 [构建与配置](setup.md#系统日志写盘降载logd-watchdog-防护) 关闭持久化并清理旧测试守护进程。
 - **原生 UVC 摄像头**：常规预览、应用访问和 90 秒持续原始帧采集已验证；IR 红外摄像头与长时间通话未验证。
 - **CPU 温度与热键**：封装温度读数已验证；独立风扇 RPM、联想 EC/DYTC 模式切换、`Fn+Q`/`Fn+R`/`Fn+Space`/FnLock 等更多物理热键仍未完整适配。
-- **Apple 账户与 App Store**：登录后退出及 App Store 登录故障尚未定位。仓库不包含可共用的机器身份数据。
+- **Apple 账户与 App Store**。系统设置登录与 iCloud 账户保存已验证。App Store 下载与 Siri 待验。

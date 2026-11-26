@@ -1,5 +1,7 @@
 # 来源与修改范围
 
+从 `v2026.11.26` 起，预编译 EFI 作为 GitHub Release 附件提供。附件中的 `THIRD-PARTY.md` 列出各组件的版本与对应源码，`licenses/` 收录上游许可和声明。公共配置使用空白设备标识，显卡运行时和内置音频所需的 Apple 载荷由各自上游按需安装。[EFI 发布说明](efi-release.md)
+
 显卡代码当前基于 [b00t0x/WhateverXe](https://github.com/b00t0x/WhateverXe) 的 `0.8.3` 源码快照（tag `0.8.3`，commit `f26a36880c49ea1063393d943527808c0f38feca`），搭配上游 [b00t0x/WhateverXe-Graphics](https://github.com/b00t0x/WhateverXe-Graphics) `v0.4.4`（commit `61c7cddda38d6a5d0057a01f402aab6efb612e13`，含 `AppleIntelTGLCompat 0.8.1`、`#47` Metal 内存修复、`#60` / `#96` VA 修复）；原始许可与版权保留于 `sources/WhateverXe/LICENSE.txt`。本仓库不声称原创上游驱动，也没有包含上游完整 Git 历史。
 
 在 WhateverXe `0.8.3` 基础上，本机选择性保留与集成的修改主要包括：
@@ -18,7 +20,8 @@
 
 - `patch_tgl_vadriver_h264.py`：仅通过偏移验证和二进制补丁脚本输出针对 stock `WhateverXe-Graphics v0.4.4` 的 H.264 修复或软件回退包，仓库内不包含任何 Apple 二进制载荷。
 - `verify_vt_h264.mm` 与 `run_verify_vt_h264.py`：基于 macOS 公开 `VideoToolbox` / `CoreVideo` / `ImageIO` 框架的独立画质、码率与 H.264 Annex-B Slice QP 校验工具。
-- `patch_intelbtunified_ax211_fw.py`：依据 [laguillo/IntelBTUnified](https://github.com/laguillo/IntelBTUnified) (`v1.0.1`, GPL-3.0-only) 的 `_fwList` 结构，由用户本地自备的 `IntelBluetoothFirmware 2.5.3` 提取 AX211 较新固件替换对应槽位的工具脚本，仓库不分发两者的二进制 kext。
+- `patch_intelbtunified_ax211_fw.py`：依据 [laguillo/IntelBTUnified](https://github.com/laguillo/IntelBTUnified) (`v1.0.1`, GPL-3.0-only) 的 `_fwList` 结构，由用户本地的 `IntelBluetoothFirmware 2.5.3` 提取 AX211 较新固件，替换对应槽位。当前 EFI 使用上游 `IntelBluetoothFirmware 2.5.3`，修补后的 `IntelBTUnified` 由使用者本地生成。
+- `prepare_efi_extras.py`：由用户下载并校验 `USBToolBox` 和 `ECEnabler`，启用 USB 端口映射与电池支持所需的配置。
 - `make_hidpi_override.py` 与 `fix_panel_edid.py`：本地生成显示覆盖与校验修正 plist 的辅助脚本，包含 HiDPI/LoDPI 碰撞拒绝与数量预警。
 
 ACPI 中的 PNLF、polling 触控板和亮度热键 SSDT、I2C 匹配注入器及文档同样按仓库 BSD-3-Clause 许可提供，不包含整机固件表、SMBIOS 身份或面板原始转储。

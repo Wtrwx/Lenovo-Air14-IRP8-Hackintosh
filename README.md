@@ -1,8 +1,10 @@
 # Lenovo Air14 IRP8 Hackintosh
 
-联想小新 Air14 IRP8 的 macOS 适配源码、辅助工具与配置片段，当前显卡基线基于 [WhateverXe](https://github.com/b00t0x/WhateverXe) `0.8.3` 与 [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphics) `v0.4.4`。
+联想小新 Air14 IRP8 的预编译 EFI、macOS 适配源码与配置工具。当前显卡基线使用 WhateverXe `0.8.3` 与 Graphics `v0.4.4`。[WhateverXe](https://github.com/b00t0x/WhateverXe) · [WhateverXe Graphics](https://github.com/b00t0x/WhateverXe-Graphics)
 
-**当前状态：核心日常能力（内屏 120Hz HiDPI、外接 HDMI 144Hz HiDPI、标准 H.264 硬编/硬解、蓝牙 `IntelBTUnified`、触控板、电池与亮度热键）已可用；但原生低延迟 H.264 编码仍故意保持屏蔽，且长睡眠 S0ix、部分热键及少数长周期 GPU 调度队列挂起仍在继续收敛。** 本仓库不提供可直接替换使用的完整 EFI。
+## EFI 下载
+
+**Air14 IRP8 · i5-1340P / AX211 · macOS Tahoe 26.7.2（25G332）**。发行包提供 OpenCore 引导目录和 SHA‑256 校验文件。使用前请在配置中填入自己的设备标识，并按安装说明准备图形运行时。[下载 EFI ZIP](https://github.com/Wtrwx/Lenovo-Air14-IRP8-Hackintosh/releases/download/v2026.11.26/Air14-IRP8-Tahoe-25G332-EFI.zip) · [GitHub 发布](https://github.com/Wtrwx/Lenovo-Air14-IRP8-Hackintosh/releases/tag/v2026.11.26) · [安装与适用范围](docs/efi-release.md)
 
 ## 硬件与验证范围
 
@@ -27,7 +29,8 @@
 | 内屏 120Hz & HiDPI | 已验证：`1440 × 900 HiDPI @ 120Hz`（`0.8.3` OpRegion Mailbox 5 原生识别面板 EDID） |
 | 机身 HDMI 输出 & HiDPI | 已实测 `3840 × 2160`（UI `1920 × 1080 HiDPI @ 144Hz`）与内屏 `120Hz` 同屏工作；已修复显示模式过多导致的设置卡死与 HiDPI 碰撞 |
 | H.264 硬件编码 / 解码 | **标准硬编/硬解已修复并实测通过**（清零 `MEDIA_SURFACE_STATE.DW2` 双重 pitch）；原生低延迟 `feature=0x400` 保持拦截防 VCS0 挂起 |
-| 蓝牙 | **已修复 `bluetoothd` 崩溃循环**：`IntelBTUnified 1.0.1` + 注入 `2026-01-28` AX211 固件，替代 `BlueToolFixup`；A2DP/睡醒稳定性继续观测 |
+| Wi-Fi / 蓝牙 | AX211 使用 `ForbiddenItlwm 0.7.0-alpha.4`、`IntelBluetoothFirmware 2.5.3`、`BlueToolFixup 2.7.3` 与 `BTLEAdvFixup 0.9.8`；耳机与长睡眠回连待验 |
+| 隔空投送 | 内置 EFI 启动后，macOS 日志记录发送和接收各成功一次 |
 | 电池 | 电量与充电器拔插状态切换已验证（`ECEnabler` + `SMCBatteryManager`） |
 | 触控板 | 移动、按压左键、轻点、双指滚动、右下角右键可用（`VoodooI2C` polling） |
 | 开合盖与睡眠唤醒 | 集成 `WhateverXe 0.8.3` 唤醒内存与显示恢复机制并实测常规使用；长睡眠 S0ix / DarkWake 全场景仍在验证 |
@@ -37,9 +40,9 @@
 | 电源键 / Fn | 原生亮度键、Insert/Print Screen 已改用 EFI `SSDT-BKEY`；更多组合键与 `Fn+Q` 待验证 |
 | CPU 温度 | Raptor Lake-P DTS 插件已验证有效读数与负载变化；风扇 RPM 接口未适配 |
 | Thunderbolt | 普通 USB 扩展坞设备可枚举；NHI、热插拔和雷电设备未验证 |
-| Apple 账户 | 登录后退出及 App Store 登录失败尚未解决 |
+| Apple 账户 | 系统设置登录与 iCloud 账户保存已验证；App Store 下载及 Siri 待验 |
 
-最新全量进展见 [2026-11-25 更新](docs/status-2026-11-25.md)，历史节点见 [2026-11-09 更新](docs/status-2026-11-09.md) 与 [2026-11-07 状态更新](docs/status-2026-11-07.md)，已知边界见 [已知问题](docs/known-issues.md)。
+本轮隔空投送和 EFI 发布记录，以及此前图形与外设进展。[2026-11-26 更新](docs/status-2026-11-26.md) · [2026-11-25 更新](docs/status-2026-11-25.md) · [已知问题](docs/known-issues.md)
 
 ## 仓库内容
 
@@ -54,7 +57,7 @@
 - [tools/make_hidpi_override.py](tools/make_hidpi_override.py)：生成零 LoDPI/HiDPI 碰撞的显示器 HiDPI `scale-resolutions` 候选文件，并在条目过多时提示 `MPDisplayMgr` 卡顿风险。
 - [构建与配置说明](docs/setup.md)、[来源与修改范围](docs/provenance.md)。
 
-完整 EFI、SMBIOS 身份、原始 EDID/ACPI 转储、账户数据、诊断日志以及 Apple / 第三方驱动二进制均未纳入本仓库。Apple 显卡驱动载荷与蓝牙二进制需按上游说明自行获取。
+预编译 EFI 通过 GitHub Releases 提供。源码目录提供公共配置模板，EFI 附件附有各组件的源码与许可说明。[公共配置模板](config/Air14-IRP8-Tahoe-25G332.plist) · [来源与修改范围](docs/provenance.md)
 
 ## 构建
 
