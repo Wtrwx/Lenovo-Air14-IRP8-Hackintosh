@@ -4,7 +4,7 @@
 
 ## EFI 下载
 
-**Air14 IRP8 · i5-1340P / AX211 · macOS Tahoe 26.7.2（25G332）**。发行包提供 OpenCore 引导目录和 SHA‑256 校验文件。使用前请在配置中填入自己的设备标识，并按安装说明准备图形运行时。[下载 EFI ZIP](https://github.com/Wtrwx/Lenovo-Air14-IRP8-Hackintosh/releases/download/v2026.11.26/Air14-IRP8-Tahoe-25G332-EFI.zip) · [GitHub 发布](https://github.com/Wtrwx/Lenovo-Air14-IRP8-Hackintosh/releases/tag/v2026.11.26) · [安装与适用范围](docs/efi-release.md)
+**Air14 IRP8 · i5-1340P / AX211 · macOS Tahoe 26.7.2（25G332）**。发行包提供 OpenCore 引导目录、预编译内置麦克风驱动和 SHA‑256 校验文件。使用前请在配置中填入自己的设备标识，并按安装说明准备音频和图形依赖。[下载 EFI ZIP](https://github.com/Wtrwx/Lenovo-Air14-IRP8-Hackintosh/releases/download/v2026.11.27/Air14-IRP8-Tahoe-25G332-EFI.zip) · [GitHub 发布](https://github.com/Wtrwx/Lenovo-Air14-IRP8-Hackintosh/releases/tag/v2026.11.27) · [安装与适用范围](docs/efi-release.md)
 
 ## 硬件与验证范围
 
@@ -36,7 +36,7 @@
 | 开合盖与睡眠唤醒 | 集成 `WhateverXe 0.8.3` 唤醒内存与显示恢复机制并实测常规使用；长睡眠 S0ix / DarkWake 全场景仍在验证 |
 | 摄像头 | 原生 UVC 实际预览、应用访问和 90 秒持续采集已验证；IR 红外与通话长期压测待补 |
 | USB-C DP Alt Mode 视频输出 | 未解决；与普通 USB、Thunderbolt 分别验证 |
-| 声卡 / 麦克风 | 未解决；内置 SST 数字麦克风需要单独适配 |
+| 麦克风 | 内置 Intel SST 数字麦克风与 3.5 mm 耳麦均已实测录音。[音频配置](docs/efi-release.md#启用麦克风) · [实机记录](docs/status-2026-11-27.md) |
 | 电源键 / Fn | 原生亮度键、Insert/Print Screen 已改用 EFI `SSDT-BKEY`；更多组合键与 `Fn+Q` 待验证 |
 | CPU 温度 | Raptor Lake-P DTS 插件已验证有效读数与负载变化；风扇 RPM 接口未适配 |
 | Thunderbolt | 普通 USB 扩展坞设备可枚举；NHI、热插拔和雷电设备未验证 |
@@ -50,6 +50,7 @@
 - [sources/SMCProcessor](sources/SMCProcessor)：保留 VirtualSMC 的 Raptor Lake-P 温度插件源码、构建方式和能力边界。
 - [ACPI](ACPI)：背光（`SSDT-AIR-PNLF`）、触控板（`SSDT-AIR-I2CP`）及原生亮度键（`SSDT-BKEY`）的自定义 SSDT 源码。
 - [config](config)：OpenCore 配置片段与 I2C 匹配注入器的 Info.plist。
+- [IntelSSTDMIC 适配](sources/IntelSSTDMIC) 提供内置数字麦克风修复补丁与构建说明。
 - [tools/patch_tgl_vadriver_h264.py](tools/patch_tgl_vadriver_h264.py)：针对 `WhateverXe-Graphics v0.4.4` 的 `AppleIntelTGLGraphicsVADriver.bundle` 修补脚本，支持保留低延迟 `0x400` 拦截的同时修复标准 H.264 硬件编码（`MEDIA_SURFACE_STATE.DW2`），或一键生成纯软件回退包。
 - [tools/verify_vt_h264.mm](tools/verify_vt_h264.mm) / [tools/run_verify_vt_h264.py](tools/run_verify_vt_h264.py)：无外部依赖的 VideoToolbox H.264 编码画质（Y/U/V PSNR）、码率、Slice QP 解析与防挂起自检工具。
 - [tools/patch_intelbtunified_ax211_fw.py](tools/patch_intelbtunified_ax211_fw.py)：将 `IntelBluetoothFirmware 2.5.3` 内较新的 `2026-01-28` / `2024-01-31` AX211 固件注入 `IntelBTUnified 1.0.1` 的可复现二进制修补脚本。

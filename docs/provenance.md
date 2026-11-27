@@ -1,6 +1,6 @@
 # 来源与修改范围
 
-从 `v2026.11.26` 起，预编译 EFI 作为 GitHub Release 附件提供。附件中的 `THIRD-PARTY.md` 列出各组件的版本与对应源码，`licenses/` 收录上游许可和声明。公共配置使用空白设备标识，显卡运行时和内置音频所需的 Apple 载荷由各自上游按需安装。[EFI 发布说明](efi-release.md)
+从 `v2026.11.26` 起，预编译 EFI 作为 GitHub Release 附件提供。附件中的 `THIRD-PARTY.md` 列出各组件的版本与对应源码，`licenses/` 收录上游许可和声明。公共配置使用空白设备标识，显卡运行时和内置音频所需的 Apple 载荷由各自上游按需安装。内置数字麦克风采用 IntelSSTDMIC 1.0.3 与 Air14 补丁，EFI 同时附带 IntelSSTDMIC 与随驱动嵌入的 Intel SOF 固件许可。[EFI 发布说明](efi-release.md) · [IntelSSTDMIC 来源与构建](../sources/IntelSSTDMIC)
 
 显卡代码当前基于 [b00t0x/WhateverXe](https://github.com/b00t0x/WhateverXe) 的 `0.8.3` 源码快照（tag `0.8.3`，commit `f26a36880c49ea1063393d943527808c0f38feca`），搭配上游 [b00t0x/WhateverXe-Graphics](https://github.com/b00t0x/WhateverXe-Graphics) `v0.4.4`（commit `61c7cddda38d6a5d0057a01f402aab6efb612e13`，含 `AppleIntelTGLCompat 0.8.1`、`#47` Metal 内存修复、`#60` / `#96` VA 修复）；原始许可与版权保留于 `sources/WhateverXe/LICENSE.txt`。本仓库不声称原创上游驱动，也没有包含上游完整 Git 历史。
 

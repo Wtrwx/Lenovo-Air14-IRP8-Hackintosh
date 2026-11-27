@@ -1,0 +1,268 @@
+--- a/kext/IntelSSTDMIC/HookManager.cpp
++++ b/kext/IntelSSTDMIC/HookManager.cpp
+@@ -4,86 +4,77 @@
+ #include <IOKit/IOLib.h>
+ #include <IOKit/audio/IOAudioStream.h>
+ 
++namespace {
++enum Target { ConvertInput, InitHardware, PerformStart, PerformStop, StopHardware, FormatChange, TargetCount };
++
++// Require the resolved function and the bytes Lilu may copy to lie within the image.
++constexpr size_t GuardSize = 24;
++constexpr const char *Symbols[TargetCount] = {
++    "__ZN14AppleHDAEngine19convertInputSamplesEPKvPvjjPK20_IOAudioStreamFormatP13IOAudioStream",
++    "__ZN19AppleHDAEngineInput12initHardwareEP9IOService",
++    "__ZN14AppleHDAEngine23performAudioEngineStartEv",
++    "__ZN19AppleHDAEngineInput22performAudioEngineStopEv",
++    "__ZN19AppleHDAEngineInput12stopHardwareEP9IOService",
++    "__ZN19AppleHDAEngineInput19performFormatChangeEP13IOAudioStreamPK20_IOAudioStreamFormatPK18_IOAudioSampleRate",
++};
++} // namespace
++
+ NativeHdaOps HookManager::ops {};
+ HookManager::Status HookManager::routeStatus {};
+ DspAudioEngineManager *HookManager::currentManager = nullptr;
+ 
+-namespace {
+-constexpr const char *kConvertInputSymbol =
+-    "__ZN14AppleHDAEngine19convertInputSamplesEPKvPvjjPK20_IOAudioStreamFormatP13IOAudioStream";
+-constexpr const char *kInitHardwareSymbol =
+-    "__ZN19AppleHDAEngineInput12initHardwareEP9IOService";
+-constexpr const char *kStopHardwareSymbol =
+-    "__ZN19AppleHDAEngineInput12stopHardwareEP9IOService";
+-constexpr const char *kPerformStartSymbol =
+-    "__ZN14AppleHDAEngine23performAudioEngineStartEv";
+-constexpr const char *kPerformStopSymbol =
+-    "__ZN19AppleHDAEngineInput22performAudioEngineStopEv";
+-constexpr const char *kFormatChangeSymbol =
+-    "__ZN19AppleHDAEngineInput19performFormatChangeEP13IOAudioStreamPK20_IOAudioStreamFormatPK18_IOAudioSampleRate";
+-}
+-
+ bool HookManager::install(KernelPatcher &patcher, size_t kextId,
+                           mach_vm_address_t address, size_t size) {
++    if (routeStatus.routeOk == 1) return true;
+     routeStatus.kextId = (uint32_t)kextId;
+     routeStatus.kextSize = (uint32_t)size;
+-    routeStatus.kextAddr = address;
+-
+-    // Diagnostic: resolve the data symbol directly. On kernel-collection boots the callback's
+-    // address/size range is not always a valid symbol search range.
+-    mach_vm_address_t solved = patcher.solveSymbol(kextId, kConvertInputSymbol);
+-    routeStatus.solveError = (uint32_t)patcher.getError();
+-    patcher.clearError();
+-    routeStatus.solveOk = solved != 0;
+-    routeStatus.solveAddr = solved;
+-
+-    auto tryRoute = [&](KernelPatcher::RouteRequest &request) -> bool {
+-        bool ok = patcher.routeMultiple(kextId, &request, 1, address, size);
+-        uint32_t err = (uint32_t)patcher.getError();
++    uintptr_t positions[TargetCount] {};
++    bool haveSymbols = size >= GuardSize;
++    for (size_t i = 0; i < TargetCount; ++i) {
++        auto pos = patcher.solveSymbol(kextId, Symbols[i]);
++        if (i == ConvertInput) routeStatus.solveError = (uint32_t)patcher.getError();
+         patcher.clearError();
+-        if (!ok) {
+-            ok = patcher.routeMultiple(kextId, &request, 1);
+-            err = (uint32_t)patcher.getError();
+-            patcher.clearError();
++        if (!pos || pos < address || size < GuardSize || pos - address > size - GuardSize) {
++            haveSymbols = false;
++            break;
+         }
+-        if (!ok) {
+-            ok = patcher.routeMultiple(kextId, &request, 1, 0, 0, true, true);
+-            err = (uint32_t)patcher.getError();
+-            patcher.clearError();
+-        }
+-        routeStatus.convertError = err;
+-        return ok;
+-    };
+-
+-    bool convertOk = routeStatus.routeOk == 1;
+-    if (!convertOk) {
+-        KernelPatcher::RouteRequest request(kConvertInputSymbol, convertInputHook, ops.convertInputSamples);
+-        convertOk = tryRoute(request);
+-        routeStatus.routeOk = convertOk ? 1 : 2;
+-        IOLog("IntelSSTDMIC: Lilu hook convertInputSamples %s (err %u, solve %u/%u)\n",
+-              convertOk ? "installed" : "FAILED", routeStatus.convertError,
+-              routeStatus.solveOk, routeStatus.solveError);
++        positions[i] = pos;
+     }
+-
+-    if (!convertOk) {
+-        if (currentManager) currentManager->setNativeOps(&ops);
++    routeStatus.solveOk = haveSymbols;
++    if (!haveSymbols) {
++        routeStatus.routeOk = 2;
++        IOLog("IntelSSTDMIC: AppleHDA capture symbols could not be verified\n");
+         return false;
+     }
+ 
+-    auto routeLifecycle = [&](const char *symbol, auto hook, auto &original, uint32_t bit) {
+-        if (routeStatus.routeEngine & bit) return;
+-        KernelPatcher::RouteRequest request(symbol, hook, original);
+-        bool ok = tryRoute(request);
+-        if (ok) routeStatus.routeEngine |= bit;
+-        IOLog("IntelSSTDMIC: Lilu hook %s %s (err %u)\n", symbol,
+-              ok ? "installed" : "FAILED", routeStatus.convertError);
++    routeStatus.source = 1;
++
++    auto route = [&](Target target, auto hook, auto &original) {
++        KernelPatcher::RouteRequest request(nullptr, hook, original);
++        request.from = positions[target];
++        const bool ok = patcher.routeMultiple(kextId, &request, 1);
++        if (!ok) IOLog("IntelSSTDMIC: failed to route %s\n", Symbols[target]);
++        patcher.clearError();
++        return ok;
+     };
++    if (!route(ConvertInput, convertInputHook, ops.convertInputSamples)) {
++        routeStatus.routeOk = 2;
++        routeStatus.convertError = 1;
++        return false;
++    }
++    routeStatus.routeOk = 1;
+ 
+-    routeLifecycle(kInitHardwareSymbol, initHardwareHook, ops.initHardware, 1u << 0);
+-    routeLifecycle(kPerformStartSymbol, performStartHook, ops.performAudioEngineStart, 1u << 1);
+-    routeLifecycle(kPerformStopSymbol, performStopHook, ops.performAudioEngineStop, 1u << 2);
+-    routeLifecycle(kStopHardwareSymbol, stopHardwareHook, ops.stopHardware, 1u << 3);
+-    routeLifecycle(kFormatChangeSymbol, formatChangeHook, ops.performFormatChange, 1u << 4);
++    auto routeLifecycle = [&](Target target, auto hook, auto &original, uint32_t bit) {
++        if (route(target, hook, original)) routeStatus.routeEngine |= bit;
++        else routeStatus.engineError |= bit;
++    };
++    routeLifecycle(InitHardware, initHardwareHook, ops.initHardware, 1u << 0);
++    routeLifecycle(PerformStart, performStartHook, ops.performAudioEngineStart, 1u << 1);
++    routeLifecycle(PerformStop, performStopHook, ops.performAudioEngineStop, 1u << 2);
++    routeLifecycle(StopHardware, stopHardwareHook, ops.stopHardware, 1u << 3);
++    routeLifecycle(FormatChange, formatChangeHook, ops.performFormatChange, 1u << 4);
++    IOLog("IntelSSTDMIC: verified AppleHDA capture hook (source=%u, lifecycle=%u)\n",
++          routeStatus.source, routeStatus.routeEngine);
+ 
+     if (currentManager) currentManager->setNativeOps(&ops);
+     return true;
+--- a/kext/IntelSSTDMIC/HookManager.hpp
++++ b/kext/IntelSSTDMIC/HookManager.hpp
+@@ -19,7 +19,7 @@
+         uint32_t arg {0}, onKextErr {0}, kextCb {0}, routeOk {0};
+         uint32_t convertError {0}, engineError {0};
+         uint32_t kextId {0}, kextSize {0}, solveOk {0}, solveError {0};
+-        uint64_t kextAddr {0}, solveAddr {0};
++        uint32_t unrelatedCallbacks {0}, source {0};
+         // bit0 init, bit1 performStart, bit2 performStop, bit3 stopHardware, bit4 format
+         uint32_t routeEngine {0};
+     };
+--- a/kext/IntelSSTDMIC/Info.plist
++++ b/kext/IntelSSTDMIC/Info.plist
+@@ -29,7 +29,7 @@
+ 			<key>IOMatchCategory</key>
+ 			<string>IntelSSTDMIC</string>
+ 			<key>IOPCIPrimaryMatch</key>
+-			<string>0x02c88086 0x9dc88086 0xa3488086 0x06c88086 0xa0c88086 0x43c88086 0x34c88086 0x51c88086 0x51cc8086 0x51c98086 0x51cd8086</string>
++			<string>0x02c88086 0x9dc88086 0xa3488086 0x06c88086 0xa0c88086 0x43c88086 0x34c88086 0x51c88086 0x51cc8086 0x51c98086 0x51cd8086 0x51ca8086</string>
+ 			<key>IOProbeScore</key>
+ 			<integer>100</integer>
+ 			<key>IOProviderClass</key>
+--- a/kext/IntelSSTDMIC/IntelDspAudioEngine.cpp
++++ b/kext/IntelSSTDMIC/IntelDspAudioEngine.cpp
+@@ -5,6 +5,7 @@
+ #include <IOKit/IOLib.h>
+ #include <IOKit/pci/IOPCIDevice.h>
+ #include <kern/clock.h>
++#include <libkern/c++/OSDictionary.h>
+ #include <libkern/c++/OSString.h>
+ #include <libkern/c++/OSNumber.h>
+ #include <stdarg.h>
+@@ -126,8 +127,17 @@
+ 
+ bool IntelDspAudioEngine::isInternalMicEngine(IOService *self) const {
+     if (!self) return false;
+-    OSString *desc = OSDynamicCast(OSString, self->getProperty("IOAudioEngineDescription"));
+-    return desc && desc->isEqualTo("DevShortNameIMic");
++    const auto *meta = self->getMetaClass();
++    const char *className = meta ? meta->getClassName() : nullptr;
++    if (className && strcmp(className, "AppleHDAEngineInput") == 0) {
++        // SimpleHDA localizes the engine's display name. AppleHDA's input metadata
++        // distinguishes the internal microphone engine from the analog jack engine.
++        auto device = OSDynamicCast(OSDictionary, self->getProperty("IOAudioEngineDeviceDescription"));
++        auto microphones = device ? OSDynamicCast(OSNumber, device->getObject("num-internal-mics")) : nullptr;
++        if (microphones) return microphones->unsigned32BitValue() != 0;
++    }
++    auto description = OSDynamicCast(OSString, self->getProperty("IOAudioEngineDescription"));
++    return description && description->isEqualTo("DevShortNameIMic");
+ }
+ 
+ bool IntelDspAudioEngine::isAlive() const {
+@@ -292,9 +302,11 @@
+             if (ownsEngine(engine)) refreshGeometry();
+             break;
+         case DspDeviceEvent::Teardown:
+-            if (ownsEngine(engine)) stopStreaming("engine teardown");
+-            powerDownSession("engine teardown");
+-            releaseEngineCache();
++            if (ownsEngine(engine)) {
++                stopStreaming("engine teardown");
++                powerDownSession("engine teardown");
++                releaseEngineCache();
++            }
+             break;
+         case DspDeviceEvent::PowerLost:
+             onPowerLost();
+--- a/kext/IntelSSTDMIC/IntelSSTDMIC.cpp
++++ b/kext/IntelSSTDMIC/IntelSSTDMIC.cpp
+@@ -416,16 +416,16 @@
+     setProperty("HookArg", HookManager::status().arg, 32);
+     setProperty("HookOnKextErr", HookManager::status().onKextErr, 32);
+     setProperty("HookKextCb", HookManager::status().kextCb, 32);
++    setProperty("HookUnrelatedCallbacks", HookManager::status().unrelatedCallbacks, 32);
++    setProperty("HookAddressSource", HookManager::status().source, 32);
+     setProperty("HookRouteOk", HookManager::status().routeOk, 32);
+     setProperty("HookRouteEngine", HookManager::status().routeEngine, 32);
+     setProperty("HookConvertError", HookManager::status().convertError, 32);
+     setProperty("HookEngineError", HookManager::status().engineError, 32);
+     setProperty("HookKextId", HookManager::status().kextId, 32);
+-    setProperty("HookKextAddr", HookManager::status().kextAddr, 64);
+     setProperty("HookKextSize", HookManager::status().kextSize, 32);
+     setProperty("HookSolveOk", HookManager::status().solveOk, 32);
+     setProperty("HookSolveError", HookManager::status().solveError, 32);
+-    setProperty("HookSolveAddr", HookManager::status().solveAddr, 64);
+ 
+     if (logRing) if (auto copy = OSArray::withArray(logRing)) { setProperty("Log", copy); copy->release(); }
+     if (logLock) IOLockUnlock(logLock);
+--- a/kext/IntelSSTDMIC/IntelSSTDMIC.hpp
++++ b/kext/IntelSSTDMIC/IntelSSTDMIC.hpp
+@@ -11,7 +11,7 @@
+ class DspAudioEngineManager;
+ class OSArray;
+ 
+-#define kIntelSSTDMICVersion "1.0.3"
++#define kIntelSSTDMICVersion "1.0.3-air14-imic"
+ 
+ class IntelSSTDMIC : public IOService, public IDspHost {
+     OSDeclareDefaultStructors(IntelSSTDMIC)
+--- a/kext/IntelSSTDMIC/LiluGlue.cpp
++++ b/kext/IntelSSTDMIC/LiluGlue.cpp
+@@ -8,6 +8,7 @@
+ #include <mach/kmod.h>
+ #include "BootArgs.hpp"
+ #include "HookManager.hpp"
++#include "IntelSSTDMIC.hpp"
+ 
+ static const char *bootargOff[] {
+     "-sstdmicoff"
+@@ -30,8 +31,14 @@
+ };
+ 
+ static void appleHDALoaded(void *, KernelPatcher &patcher, size_t id, mach_vm_address_t address, size_t size) {
++    // Lilu broadcasts every monitored kext to all registered callbacks.
++    if (appleHDAInfo.loadIndex == KernelPatcher::KextInfo::Unloaded || id != appleHDAInfo.loadIndex) {
++        HookManager::status().unrelatedCallbacks++;
++        return;
++    }
+     HookManager::status().kextCb++;
+     HookManager::install(patcher, id, address, size);
++    if (auto service = IntelSSTDMIC::instance()) service->stateChanged();
+ }
+ 
+ static void pluginStart() {

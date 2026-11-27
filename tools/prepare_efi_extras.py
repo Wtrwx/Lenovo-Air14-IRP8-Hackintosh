@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Retrieve the optional Air14 EFI drivers from their original releases."""
+"""Prepare the Air14 EFI's optional USB, battery or audio drivers."""
 
 import argparse
 from hashlib import sha256
@@ -30,6 +30,16 @@ DRIVERS = (
         "e21149519856308c6c4c06e0917aef9e3423ff3e23b6ea77989099f4f2cf0f0a",
     ),
 )
+
+AUDIO_DRIVER = (
+    "SimpleHDA.kext",
+    "cn.laobamac.SimpleHDA",
+    "1.0.0",
+    "https://github.com/laobamac/SimpleHDA/releases/download/v1.0.0/SimpleHDA-Tahoe-v1.0.0-RELEASE.zip",
+    "89198256664078c91155d673ee7cebb08134dad1b71d5e34b0aa4ef0d4877f8f",
+)
+SST_KEXT = "IntelSSTDMIC.kext"
+APPLE_NVRAM = "7C436110-AB2A-4BBB-A880-FE41995C9F82"
 
 
 def download_bundle(driver, staging):
@@ -65,22 +75,37 @@ def files(directory):
             for p in directory.rglob("*") if p.is_file()}
 
 
-def prepare(efi):
+def prepare(efi, audio=False):
     oc = efi / "OC"
     config_path = oc / "config.plist"
     kexts = oc / "Kexts"
     original = config_path.read_bytes()
     config = plistlib.loads(original)
-    names = {driver[0] for driver in DRIVERS} | {"UTBXHCI.kext"}
-    entries = [e for e in config["Kernel"]["Add"] if e["BundlePath"] in names]
+    drivers = (AUDIO_DRIVER,) if audio else DRIVERS
+    names = {driver[0] for driver in drivers} | {SST_KEXT if audio else "UTBXHCI.kext"}
+    kernel_add = config["Kernel"]["Add"]
+    entries = [entry for entry in kernel_add if entry["BundlePath"] in names]
     if len(entries) != len(names) or {e["BundlePath"] for e in entries} != names:
         raise ValueError("Use the configuration shipped with the Air14 public EFI")
-    port_map = kexts / "UTBXHCI.kext/Contents/Info.plist"
-    if not port_map.is_file():
+    if audio:
+        audio_order = {"Lilu.kext", "AppleALC.kext", *names}
+        ordered = [e["BundlePath"] for e in kernel_add if e["BundlePath"] in audio_order]
+        if ordered != ["Lilu.kext", "AppleALC.kext", SST_KEXT, AUDIO_DRIVER[0]]:
+            raise ValueError("Use the Air14 EFI's Lilu → AppleALC → IntelSSTDMIC → SimpleHDA order")
+        if not (kexts / SST_KEXT / "Contents/MacOS/IntelSSTDMIC").is_file():
+            raise ValueError("The EFI is missing the Air14 IntelSSTDMIC driver")
+        nvram = config["NVRAM"]["Add"][APPLE_NVRAM]
+        args = nvram["boot-args"].split()
+        for argument in ("keepsyms=1", "-sstdmicadl", "-sstdmiclayout=4"):
+            if argument not in args:
+                args.append(argument)
+        nvram["boot-args"] = " ".join(args)
+        config["Kernel"]["Quirks"]["DisableLinkeditJettison"] = True
+    elif not (kexts / "UTBXHCI.kext/Contents/Info.plist").is_file():
         raise ValueError("The EFI is missing the Air14 USB map")
     with TemporaryDirectory(prefix=".air14-kexts-", dir=oc) as tmp:
         stage = Path(tmp)
-        downloaded = [download_bundle(driver, stage) for driver in DRIVERS]
+        downloaded = [download_bundle(driver, stage) for driver in drivers]
         for entry in entries:
             entry["Enabled"] = True
         prepared_config = stage / "config.plist"
@@ -99,21 +124,24 @@ def prepare(efi):
                 raise ValueError(f"An existing {source.name} differs from the pinned version")
         if config_path.read_bytes() not in (original, prepared):
             raise RuntimeError("config.plist changed during preparation")
-        backup = oc / "config.before-extras.plist"
+        backup = oc / ("config.before-audio.plist" if audio else "config.before-extras.plist")
         try:
             with backup.open("xb") as output:
                 output.write(original)
         except FileExistsError:
             pass
         os.replace(prepared_config, config_path)
-    print("Enabled USBToolBox, the Air14 USB map and ECEnabler.")
+    print("Enabled Air14 IntelSSTDMIC and SimpleHDA." if audio else
+          "Enabled USBToolBox, the Air14 USB map and ECEnabler.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("efi", type=Path, help="Path to the extracted Air14 EFI directory")
+    parser.add_argument("--audio", action="store_true",
+                        help="Enable audio using the bundled IntelSSTDMIC and upstream SimpleHDA")
     args = parser.parse_args()
     try:
-        prepare(args.efi)
-    except (OSError, ValueError, RuntimeError, BadZipFile) as exc:
+        prepare(args.efi, args.audio)
+    except (OSError, KeyError, ValueError, RuntimeError, BadZipFile) as exc:
         parser.exit(1, f"{exc}\n")
